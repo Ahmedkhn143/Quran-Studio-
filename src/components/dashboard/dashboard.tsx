@@ -18,11 +18,9 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
+import { SimpleSelect } from "@/components/dashboard/simple-select";
 import { toast } from "sonner";
 import {
   RECITERS, TRANSLATIONS, type SurahListItem,
@@ -711,21 +709,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     <Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <Mic2 className="mr-1 inline h-3 w-3" /> Reciter
                     </Label>
-                    <Select value={reciter} onValueChange={setReciter}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RECITERS.map((r) => (
-                          <SelectItem key={r.id} value={r.id} className="text-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <span>{r.englishName}</span>
-                              <span className="text-[10px] text-muted-foreground">{r.style}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SimpleSelect
+                      value={reciter}
+                      onValueChange={setReciter}
+                      options={RECITERS.map((r) => ({
+                        value: r.id,
+                        label: r.englishName,
+                        sublabel: r.style,
+                      }))}
+                    />
                   </div>
 
                   {/* Custom audio upload */}
@@ -768,21 +760,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     <Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <Languages className="mr-1 inline h-3 w-3" /> Translation
                     </Label>
-                    <Select value={translation} onValueChange={setTranslation}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TRANSLATIONS.map((t) => (
-                          <SelectItem key={t.id} value={t.id} className="text-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <span>{t.englishName}</span>
-                              <span className="text-[10px] text-muted-foreground">{t.language}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SimpleSelect
+                      value={translation}
+                      onValueChange={setTranslation}
+                      options={TRANSLATIONS.map((t) => ({
+                        value: t.id,
+                        label: t.englishName,
+                        sublabel: t.language,
+                      }))}
+                    />
                   </div>
 
                   {/* Load slides button */}
