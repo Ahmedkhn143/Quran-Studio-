@@ -30,10 +30,37 @@ export interface VideoGenOptions {
   overlayTextColor?: string;
   overlayTextSize?: number;
   overlayTextPosition?: "top" | "bottom";
+  
+  // Custom video enhancements
+  backgroundEffect?: "none" | "ken_burns" | "particles" | "blur" | "color_overlay";
+  textEntranceEffect?: "none" | "fade" | "typewriter" | "slide_in";
+  transitionEffect?: "none" | "crossfade" | "slide" | "wipe";
+  showAudioVisualizer?: boolean;
+  showHighlight?: boolean;
+  elements?: CanvasElement[];
+
   // Callbacks
   onProgress?: (percent: number, status: string) => void;
   onComplete?: (blob: Blob, url: string) => void;
   onError?: (err: Error) => void;
+}
+
+export interface CanvasElement {
+  id: string;
+  type: "text" | "image" | "shape" | "logo";
+  shapeType?: "rectangle" | "circle" | "triangle";
+  x: number; // percentage (0 to 100)
+  y: number; // percentage (0 to 100)
+  width: number; // percentage (0 to 100)
+  height: number; // percentage (0 to 100)
+  rotation?: number; // degrees
+  content?: string;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  opacity?: number;
+  imageUrl?: string;
+  zIndex: number;
 }
 
 export interface SlideData {
@@ -232,13 +259,14 @@ function paintRadialGradient(ctx: CanvasRenderingContext2D, css: string, w: numb
 }
 
 // Draw Arabic text with word highlighting. Returns the y position after drawing.
-function drawSlide(
+export function drawSlide(
   ctx: CanvasRenderingContext2D,
   slide: SlideData,
   opts: VideoGenOptions,
   activeWordIdx: number,
   bgImage: HTMLImageElement | null,
-  bgVideo: HTMLVideoElement | null = null
+  bgVideo: HTMLVideoElement | null = null,
+  slideProgress = 0
 ) {
   const { width: w, height: h } = opts;
 
@@ -255,13 +283,39 @@ function drawSlide(
       sy = ((bgVideo.videoHeight || h) - sh) / 2;
     }
     ctx.drawImage(bgVideo, sx, sy, sw, sh, 0, 0, w, h);
-    const opacity = (100 - (opts.background.opacity ?? 100)) / 100;
-    if (opacity > 0) {
-      ctx.fillStyle = `rgba(0,0,0,${opacity})`;
-      ctx.fillRect(0, 0, w, h);
-    }
+  } else if (bgImage) {
+    const isKenBurns = opts.backgroundEffect === "ken_burns";
+    const scale = isKenBurns ? 1 + 0.08 * slideProgress : 1;
+    const dx = isKenBurns ? -((w * scale - w) / 2) * slideProgress : 0;
+    const dy = isKenBurns ? -((h * scale - h) / 2) * slideProgress : 0;
+    ctx.drawImage(bgImage, dx, dy, w * scale, h * scale);
   } else {
     paintBackground(ctx, opts.background, w, h, bgImage);
+  }
+
+  // Background effects: color overlay, particles
+  if (opts.backgroundEffect === "color_overlay") {
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(0, 0, w, h);
+  }
+  
+  if (opts.backgroundEffect === "particles") {
+    ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+    for (let i = 0; i < 20; i++) {
+      const px = ((Math.sin(i * 123 + slideProgress * 2) + 1) / 2) * w;
+      const py = h - ((i * 45 + slideProgress * 200) % h);
+      const size = 1.5 + (i % 3);
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Opacity overlay
+  const opacity = (100 - (opts.background.opacity ?? 100)) / 100;
+  if (opacity > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${opacity})`;
+    ctx.fillRect(0, 0, w, h);
   }
 
   // Vignette
@@ -325,25 +379,26 @@ function drawSlide(
       lineW += ctx.measureText(item.word).width;
     }
     lineW += spaceW * (line.length - 1);
-    let x = w / 2 - lineW / 2;
+    let x = w / 2 + lineW / 2;
     for (const item of line) {
       const ww = ctx.measureText(item.word).width;
       const isActive = item.idx === activeWordIdx;
+      const isHighlighted = isActive && (opts.showHighlight !== false);
       // Shadow
       ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillText(item.word, x + ww / 2 + 2, lineY + 2);
+      ctx.fillText(item.word, x - ww / 2 + 2, lineY + 2);
       // Word
-      ctx.fillStyle = isActive ? "#d4a017" : opts.textColor;
-      ctx.fillText(item.word, x + ww / 2, lineY);
+      ctx.fillStyle = isHighlighted ? "#d4a017" : opts.textColor;
+      ctx.fillText(item.word, x - ww / 2, lineY);
       // Active glow
-      if (isActive) {
+      if (isHighlighted) {
         ctx.shadowColor = "rgba(212,160,23,0.8)";
         ctx.shadowBlur = 24;
         ctx.fillStyle = "#d4a017";
-        ctx.fillText(item.word, x + ww / 2, lineY);
+        ctx.fillText(item.word, x - ww / 2, lineY);
         ctx.shadowBlur = 0;
       }
-      x += ww + spaceW;
+      x -= ww + spaceW;
     }
   });
 
@@ -391,6 +446,86 @@ function drawSlide(
       ctx.textBaseline = "bottom";
       ctx.fillText(opts.overlayText, w / 2, h - Math.round(h * 0.05));
     }
+  }
+
+  // Draw custom canvas elements
+  if (opts.elements && opts.elements.length > 0) {
+    const sorted = [...opts.elements].sort((a, b) => a.zIndex - b.zIndex);
+    sorted.forEach((el) => {
+      ctx.save();
+      
+      const elX = (el.x / 100) * w;
+      const elY = (el.y / 100) * h;
+      const elW = (el.width / 100) * w;
+      const elH = (el.height / 100) * h;
+      const opacity = el.opacity !== undefined ? el.opacity / 100 : 1;
+      
+      ctx.globalAlpha = opacity;
+      
+      // Translate to element center for rotation
+      ctx.translate(elX + elW / 2, elY + elH / 2);
+      if (el.rotation) {
+        ctx.rotate((el.rotation * Math.PI) / 180);
+      }
+      
+      if (el.type === "text" && el.content) {
+        ctx.fillStyle = el.color || "#ffffff";
+        const fSize = el.fontSize || 24;
+        const fFamily = el.fontFamily || "Inter, sans-serif";
+        ctx.font = `${fSize}px ${fFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(el.content, 0, 0);
+      } else if (el.type === "shape") {
+        ctx.fillStyle = el.color || "rgba(255,255,255,0.5)";
+        if (el.shapeType === "circle") {
+          ctx.beginPath();
+          ctx.arc(0, 0, Math.min(elW, elH) / 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (el.shapeType === "triangle") {
+          ctx.beginPath();
+          ctx.moveTo(0, -elH / 2);
+          ctx.lineTo(elW / 2, elH / 2);
+          ctx.lineTo(-elW / 2, elH / 2);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillRect(-elW / 2, -elH / 2, elW, elH);
+        }
+      } else if ((el.type === "image" || el.type === "logo") && el.imageUrl) {
+        const imgId = `el_img_${el.id}`;
+        let img = (window as any)[imgId] as HTMLImageElement | null;
+        if (!img) {
+          img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = el.imageUrl;
+          img.onload = () => { (window as any)[imgId] = img; };
+        }
+        if (img && img.complete) {
+          ctx.drawImage(img, -elW / 2, -elH / 2, elW, elH);
+        } else {
+          ctx.fillStyle = "rgba(255,255,255,0.1)";
+          ctx.fillRect(-elW / 2, -elH / 2, elW, elH);
+        }
+      }
+      
+      ctx.restore();
+    });
+  }
+
+  // Audio Visualizer synced wave
+  if (opts.showAudioVisualizer) {
+    const waveH = h * 0.07;
+    const waveY = h - waveH - h * 0.08;
+    ctx.strokeStyle = "rgba(212, 160, 23, 0.75)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (let x = 0; x < w; x += 6) {
+      const offset = Math.sin(x * 0.015 + slideProgress * 60) * Math.cos(x * 0.004) * (waveH * 0.4);
+      if (x === 0) ctx.moveTo(x, waveY + offset);
+      else ctx.lineTo(x, waveY + offset);
+    }
+    ctx.stroke();
   }
 }
 

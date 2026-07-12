@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   generateQuranVideo,
-  type SlideData, type BackgroundSpec,
+  type SlideData, type BackgroundSpec, type CanvasElement
 } from "@/lib/video-generator";
 import { toast } from "sonner";
 
@@ -41,6 +41,12 @@ interface VideoGenDialogProps {
   overlayTextColor?: string;
   overlayTextSize?: number;
   overlayTextPosition?: "top" | "bottom";
+  elements?: CanvasElement[];
+  backgroundEffect?: "none" | "ken_burns" | "particles" | "blur" | "color_overlay";
+  textEntranceEffect?: "none" | "fade" | "typewriter" | "slide_in";
+  transitionEffect?: "none" | "crossfade" | "slide" | "wipe";
+  showAudioVisualizer?: boolean;
+  showHighlight?: boolean;
 }
 
 const QUALITY_PRESETS = [
@@ -63,6 +69,7 @@ export function VideoGenDialog({
   textColor, textShadow, textSize, showTranslation, aspectRatio, customAudioUrl,
   arabicFont, translationFont,
   overlayText, overlayTextColor, overlayTextSize, overlayTextPosition,
+  elements, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer, showHighlight
 }: VideoGenDialogProps) {
   const [quality, setQuality] = useState("720p");
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
@@ -157,6 +164,12 @@ export function VideoGenDialog({
         overlayTextColor,
         overlayTextSize: overlayTextSize ? Math.round((overlayTextSize / 900) * dims.h) : undefined,
         overlayTextPosition,
+        elements,
+        backgroundEffect,
+        textEntranceEffect,
+        transitionEffect,
+        showAudioVisualizer,
+        showHighlight
       });
 
       setState("done");
