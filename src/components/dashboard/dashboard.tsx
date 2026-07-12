@@ -581,9 +581,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       
       setSelectedSurah(detection.surahNumber);
       setFromAyah(1);
-      setToAyah(Math.min(10, SURAHS_DB.find(s => s.number === detection.surahNumber)?.numberOfAyahs || 1));
+      const toAy = Math.min(10, SURAHS_DB.find(s => s.number === detection.surahNumber)?.numberOfAyahs || 1);
+      setToAyah(toAy);
       
       toast.success(`Detected: ${SURAHS_DB.find(s => s.number === detection.surahNumber)?.englishName} (${detection.confidence}% confidence)`);
+      
+      // Auto-load detected surah slides immediately
+      setTimeout(() => {
+        loadSlides({ surah: detection.surahNumber, from: 1, to: toAy, silent: true });
+      }, 200);
     } catch (err: any) {
       toast.error("Audio decoding failed: " + err.message);
     }
@@ -958,7 +964,24 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const textSizeMap: Record<string, string> = { sm: "1.5rem", md: "2.25rem", lg: "3rem", xl: "3.75rem" };
   const textSizeValue = textSizeMap[textSize] ?? "2.25rem";
 
-  const arabicFontFamily = arabicFont;
+  const arabicFontFamily = (() => {
+    switch (arabicFont) {
+      case "KFGQPC Uthmanic Script Hafs":
+        return '"Scheherazade New", "Amiri", serif';
+      case "Amiri Quran":
+        return '"Amiri Quran", "Amiri", serif';
+      case "Scheherazade":
+        return '"Scheherazade", "Scheherazade New", serif';
+      case "me_quran":
+        return '"Scheherazade New", "Amiri", serif';
+      case "PDMS Saleem Quran Font":
+        return '"Noto Naskh Arabic", "Amiri", serif';
+      case "LPMQ Isep Misbah":
+        return '"Noto Naskh Arabic", "Amiri", serif';
+      default:
+        return arabicFont;
+    }
+  })();
   const translationFontFamily = translationFont;
 
   const aspectClass = ASPECT_RATIOS.find((a) => a.id === aspectRatio)?.className ?? "aspect-16-9";
@@ -1963,6 +1986,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                         return;
                       }
                       setPrependBismillah(checked);
+                      // Dynamically reload slides to reflect Bismillah state
+                      setTimeout(() => loadSlides(), 100);
                     }}
                   />
                 </div>
@@ -1974,7 +1999,33 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     value={arabicFont}
                     onValueChange={setArabicFont}
                     options={[
-                      "Cairo", "Amiri", "Tajawal", "Scheherazade New", "Almarai", "IBM Plex Sans Arabic", "Qahiri", "Reem Kufi", "Aref Ruqaa", "Changa", "Lemonada", "El Messiri", "Lateef", "Ruwudu", "Jomhuria", "Harmattan", "Katibeh", "Kufam", "Lalezar", "Mada", "Markazi Text"
+                      "KFGQPC Uthmanic Script Hafs",
+                      "Amiri Quran",
+                      "Scheherazade",
+                      "me_quran",
+                      "PDMS Saleem Quran Font",
+                      "LPMQ Isep Misbah",
+                      "Cairo",
+                      "Amiri",
+                      "Tajawal",
+                      "Scheherazade New",
+                      "Almarai",
+                      "IBM Plex Sans Arabic",
+                      "Qahiri",
+                      "Reem Kufi",
+                      "Aref Ruqaa",
+                      "Changa",
+                      "Lemonada",
+                      "El Messiri",
+                      "Lateef",
+                      "Ruwudu",
+                      "Jomhuria",
+                      "Harmattan",
+                      "Katibeh",
+                      "Kufam",
+                      "Lalezar",
+                      "Mada",
+                      "Markazi Text"
                     ].map(f => ({ value: f, label: f }))}
                   />
                 </div>
@@ -1988,7 +2039,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       const isUrdu = translation.startsWith("ur");
                       const isHindi = translation.startsWith("hi");
                       const list = isUrdu
-                        ? ["Noto Nastaliq Urdu", "Amiri", "Scheherazade New", "Cairo"]
+                        ? ["Noto Nastaliq Urdu", "Cairo", "Amiri", "Tajawal", "Scheherazade New", "Almarai", "IBM Plex Sans Arabic", "Qahiri", "Reem Kufi", "Aref Ruqaa", "Changa", "Lemonada", "El Messiri", "Lateef", "Ruwudu", "Jomhuria", "Harmattan", "Katibeh", "Kufam", "Lalezar", "Mada"]
                         : isHindi
                         ? ["Noto Sans Devanagari", "Rozha One", "Yatra One", "Rajdhani", "Hind", "Teko", "Khand", "Biryani", "Karma", "Kurale", "Amita", "Halant", "Gotu", "Mukta", "Modak", "Sarpanch", "Federo", "Asar", "Vesper Libre"]
                         : ["Inter", "Roboto", "Playfair Display", "Montserrat", "Poppins", "Merriweather", "Oswald", "Raleway", "Nunito", "Chelsea Market", "Pacifico", "Great Vibes", "Cinzel", "Ubuntu", "Caveat", "Lobster", "Bebas Neue", "Open Sans", "Lato", "Lora"];

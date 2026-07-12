@@ -379,26 +379,32 @@ export function drawSlide(
       lineW += ctx.measureText(item.word).width;
     }
     lineW += spaceW * (line.length - 1);
+    
+    // Starting X at center + half width, rendering RTL (moving leftwards)
     let x = w / 2 + lineW / 2;
-    for (const item of line) {
+    for (let j = 0; j < line.length; j++) {
+      const item = line[j];
       const ww = ctx.measureText(item.word).width;
       const isActive = item.idx === activeWordIdx;
       const isHighlighted = isActive && (opts.showHighlight !== false);
+      
       // Shadow
       ctx.fillStyle = "rgba(0,0,0,0.6)";
       ctx.fillText(item.word, x - ww / 2 + 2, lineY + 2);
-      // Word
+      
+      // Word Color & Glow
       ctx.fillStyle = isHighlighted ? "#d4a017" : opts.textColor;
       ctx.fillText(item.word, x - ww / 2, lineY);
-      // Active glow
+      
       if (isHighlighted) {
+        ctx.save();
         ctx.shadowColor = "rgba(212,160,23,0.8)";
         ctx.shadowBlur = 24;
         ctx.fillStyle = "#d4a017";
         ctx.fillText(item.word, x - ww / 2, lineY);
-        ctx.shadowBlur = 0;
+        ctx.restore();
       }
-      x -= ww + spaceW;
+      x -= (ww + spaceW);
     }
   });
 

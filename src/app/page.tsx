@@ -24,7 +24,6 @@ export default function Home() {
       <main className="flex-1">
         <Hero onStart={openDashboard} />
         <AllInOne />
-        <QuranEditor onOpenDashboard={openDashboard} />
         <Features />
         <FreeForever />
         <Pricing />

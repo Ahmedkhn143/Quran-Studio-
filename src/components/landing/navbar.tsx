@@ -6,7 +6,6 @@ import { Menu, X, BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
-  { label: "Editor", href: "#editor" },
   { label: "Features", href: "#features" },
   { label: "Pricing", href: "#pricing" },
   { label: "About", href: "#about" },
