@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
-import { Inter, Amiri, Scheherazade_New } from "next/font/google";
+import {
+  Inter,
+  Amiri,
+  Scheherazade_New,
+  Noto_Nastaliq_Urdu,
+  Noto_Naskh_Arabic,
+  Noto_Sans,
+} from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -17,6 +24,24 @@ const amiri = Amiri({
 const scheherazade = Scheherazade_New({
   variable: "--font-scheherazade",
   subsets: ["arabic", "latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const notoNaskhArabic = Noto_Naskh_Arabic({
+  variable: "--font-naskh-arabic",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const notoNastaliqUrdu = Noto_Nastaliq_Urdu({
+  variable: "--font-nastaliq-urdu",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const notoSans = Noto_Sans({
+  variable: "--font-noto-sans",
+  subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
@@ -62,7 +87,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${amiri.variable} ${scheherazade.variable} antialiased bg-background text-foreground`}
+        className={`${inter.variable} ${amiri.variable} ${scheherazade.variable} ${notoNaskhArabic.variable} ${notoNastaliqUrdu.variable} ${notoSans.variable} antialiased bg-background text-foreground`}
+        suppressHydrationWarning
       >
         {children}
         <Toaster />

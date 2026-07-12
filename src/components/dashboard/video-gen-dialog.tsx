@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  generateQuranVideo, downloadBlob,
+  generateQuranVideo,
   type SlideData, type BackgroundSpec,
 } from "@/lib/video-generator";
 import { toast } from "sonner";
@@ -28,12 +28,19 @@ interface VideoGenDialogProps {
   onClose: () => void;
   slides: AyahData[];
   surahName: string;
+  customAudioUrl?: string | null;
   background: BackgroundSpec;
   textColor: string;
   textShadow: string;
   textSize: number;
   showTranslation: boolean;
   aspectRatio: string;
+  arabicFont: string;
+  translationFont: string;
+  overlayText?: string;
+  overlayTextColor?: string;
+  overlayTextSize?: number;
+  overlayTextPosition?: "top" | "bottom";
 }
 
 const QUALITY_PRESETS = [
@@ -53,7 +60,9 @@ type GenState = "idle" | "preparing" | "rendering" | "done" | "error";
 
 export function VideoGenDialog({
   open, onClose, slides, surahName, background,
-  textColor, textShadow, textSize, showTranslation, aspectRatio,
+  textColor, textShadow, textSize, showTranslation, aspectRatio, customAudioUrl,
+  arabicFont, translationFont,
+  overlayText, overlayTextColor, overlayTextSize, overlayTextPosition,
 }: VideoGenDialogProps) {
   const [quality, setQuality] = useState("720p");
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
@@ -106,11 +115,14 @@ export function VideoGenDialog({
 
     // Build slide data
     const slideData: SlideData[] = slides.map((s) => ({
-      arabicWords: s.words.map((w) => ({ text: w.text, audio: w.audio })),
+      arabicWords: s.words.map((w) => ({
+        text: w.text,
+        audio: customAudioUrl ? undefined : w.audio,
+      })),
       translation: s.translation,
       surahName,
       ayahNumber: s.numberInSurah,
-      audio: s.audio,
+      audio: customAudioUrl || s.audio,
     }));
 
     // Calculate dimensions from aspect ratio + quality preset
@@ -139,6 +151,12 @@ export function VideoGenDialog({
           setProgress(pct);
           setStatusMsg(msg);
         },
+        arabicFont,
+        translationFont,
+        overlayText,
+        overlayTextColor,
+        overlayTextSize: overlayTextSize ? Math.round((overlayTextSize / 900) * dims.h) : undefined,
+        overlayTextPosition,
       });
 
       setState("done");
@@ -245,7 +263,7 @@ export function VideoGenDialog({
                         <button
                           key={q.id}
                           onClick={() => setQuality(q.id)}
-                          disabled={state === "rendering"}
+                          disabled={state !== "idle"}
                           className={`rounded-lg border-2 px-2 py-2 text-center transition-all disabled:opacity-50 ${
                             quality === q.id
                               ? "border-[var(--gold)] bg-[var(--gold-soft)]/40"
@@ -267,7 +285,7 @@ export function VideoGenDialog({
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => setFormat("webm")}
-                        disabled={state === "rendering"}
+                        disabled={state !== "idle"}
                         className={`flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-left transition-all disabled:opacity-50 ${
                           format === "webm"
                             ? "border-[var(--gold)] bg-[var(--gold-soft)]/40"
@@ -282,7 +300,7 @@ export function VideoGenDialog({
                       </button>
                       <button
                         onClick={() => setFormat("mp4")}
-                        disabled={state === "rendering"}
+                        disabled={state !== "idle"}
                         className={`flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-left transition-all disabled:opacity-50 ${
                           format === "mp4"
                             ? "border-[var(--gold)] bg-[var(--gold-soft)]/40"

@@ -24,6 +24,12 @@ export interface VideoGenOptions {
   height: number;
   fps: number;
   format: "webm" | "mp4";
+  arabicFont?: string;
+  translationFont?: string;
+  overlayText?: string;
+  overlayTextColor?: string;
+  overlayTextSize?: number;
+  overlayTextPosition?: "top" | "bottom";
   // Callbacks
   onProgress?: (percent: number, status: string) => void;
   onComplete?: (blob: Blob, url: string) => void;
@@ -39,11 +45,12 @@ export interface SlideData {
 }
 
 export interface BackgroundSpec {
-  type: "preset" | "image" | "gradient" | "color";
+  type: "preset" | "image" | "gradient" | "color" | "video";
   // For preset/gradient/color
   cssValue?: string;
-  // For image
+  // For image/video
   imageUrl?: string;
+  videoUrl?: string;
   // Opacity 0-100
   opacity?: number;
 }
@@ -230,12 +237,32 @@ function drawSlide(
   slide: SlideData,
   opts: VideoGenOptions,
   activeWordIdx: number,
-  bgImage: HTMLImageElement | null
+  bgImage: HTMLImageElement | null,
+  bgVideo: HTMLVideoElement | null = null
 ) {
   const { width: w, height: h } = opts;
 
   // Background
-  paintBackground(ctx, opts.background, w, h, bgImage);
+  if (opts.background.type === "video" && bgVideo) {
+    const vRatio = bgVideo.videoWidth / bgVideo.videoHeight || 16/9;
+    const cRatio = w / h;
+    let sx = 0, sy = 0, sw = bgVideo.videoWidth || w, sh = bgVideo.videoHeight || h;
+    if (vRatio > cRatio) {
+      sw = sh * cRatio;
+      sx = ((bgVideo.videoWidth || w) - sw) / 2;
+    } else {
+      sh = sw / cRatio;
+      sy = ((bgVideo.videoHeight || h) - sh) / 2;
+    }
+    ctx.drawImage(bgVideo, sx, sy, sw, sh, 0, 0, w, h);
+    const opacity = (100 - (opts.background.opacity ?? 100)) / 100;
+    if (opacity > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${opacity})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+  } else {
+    paintBackground(ctx, opts.background, w, h, bgImage);
+  }
 
   // Vignette
   const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) / 3, w / 2, h / 2, Math.max(w, h) / 1.2);
@@ -259,7 +286,8 @@ function drawSlide(
 
   // Arabic words — center
   const arabicFontSize = opts.textSize;
-  ctx.font = `bold ${arabicFontSize}px "Scheherazade New", "Amiri", serif`;
+  const arabicFont = opts.arabicFont || '"Scheherazade New", "Amiri", serif';
+  ctx.font = `bold ${arabicFontSize}px ${arabicFont}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -322,7 +350,8 @@ function drawSlide(
   // Translation
   if (opts.showTranslation && slide.translation) {
     const transFontSize = Math.round(h * 0.035);
-    ctx.font = `500 ${transFontSize}px Inter, sans-serif`;
+    const translationFont = opts.translationFont || "Inter, sans-serif";
+    ctx.font = `500 ${transFontSize}px ${translationFont}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     const transY = arabicStartY + totalArabicHeight + h * 0.04;
@@ -347,6 +376,21 @@ function drawSlide(
     transLines.forEach((line, i) => {
       ctx.fillText(line, w / 2, transY + padY + i * lineH);
     });
+  }
+
+  // Watermark/Custom Overlay Text
+  if (opts.overlayText) {
+    const size = opts.overlayTextSize || Math.round(h * 0.03);
+    ctx.font = `${size}px Inter, sans-serif`;
+    ctx.fillStyle = opts.overlayTextColor || "rgba(255,255,255,0.7)";
+    ctx.textAlign = "center";
+    if (opts.overlayTextPosition === "top") {
+      ctx.textBaseline = "top";
+      ctx.fillText(opts.overlayText, w / 2, Math.round(h * 0.05));
+    } else {
+      ctx.textBaseline = "bottom";
+      ctx.fillText(opts.overlayText, w / 2, h - Math.round(h * 0.05));
+    }
   }
 }
 
@@ -449,29 +493,77 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) throw new Error("Canvas 2D context not available");
 
-  // Initial frame
-  drawSlide(ctx, opts.slides[0], opts, -1, bgImage);
-
-  // Setup MediaRecorder with canvas stream
-  // @ts-ignore - captureStream exists on HTMLCanvasElement in modern browsers
-  const stream: MediaStream = canvas.captureStream(fps);
-
-  // Setup audio mixing via Web Audio API
-  let audioCtx: AudioContext | null = null;
-  let audioDest: MediaStreamAudioDestinationNode | null = null;
-  try {
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    audioDest = audioCtx.createMediaStreamDestination();
-    const audioTrack = audioDest.stream.getAudioTracks()[0];
-    if (audioTrack) stream.addTrack(audioTrack);
-  } catch {
-    // proceed without audio
+  // Load background video if needed
+  let bgVideo: HTMLVideoElement | null = null;
+  if (opts.background.type === "video" && opts.background.videoUrl) {
+    try {
+      bgVideo = document.createElement("video");
+      bgVideo.src = opts.background.videoUrl;
+      bgVideo.muted = true;
+      bgVideo.playsInline = true;
+      bgVideo.crossOrigin = "anonymous";
+      bgVideo.load();
+      await new Promise<void>((resolve) => {
+        bgVideo!.onloadedmetadata = () => resolve();
+        bgVideo!.onerror = () => resolve();
+        setTimeout(resolve, 2000);
+      });
+    } catch {
+      bgVideo = null;
+    }
   }
 
-  const recorder = new MediaRecorder(stream, {
-    mimeType,
-    videoBitsPerSecond: width * height * fps * 0.15, // ~0.15 bits per pixel per frame
-  });
+  // Initial frame
+  drawSlide(ctx, opts.slides[0], opts, -1, bgImage, bgVideo);
+
+  // ─── Audio pipeline ────────────────────────────────────────────────────────
+  // IMPORTANT: The audio destination track MUST be added to the MediaStream
+  // BEFORE the MediaRecorder is created, otherwise the recorder won't capture
+  // any audio. We set this up first, then build the MediaRecorder.
+  let audioCtx: AudioContext | null = null;
+  let audioDest: MediaStreamAudioDestinationNode | null = null;
+  let masterGain: GainNode | null = null;
+
+  try {
+    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // Browsers require the AudioContext to be "running" before decoding
+    if (audioCtx.state === "suspended") {
+      await audioCtx.resume();
+    }
+    audioDest = audioCtx.createMediaStreamDestination();
+    // Master gain node — allows future volume control
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1.0;
+    masterGain.connect(audioDest);
+  } catch {
+    // Proceed without audio — silent video
+    audioCtx = null;
+    audioDest = null;
+    masterGain = null;
+  }
+
+  // ─── Canvas stream ──────────────────────────────────────────────────────────
+  // @ts-ignore - captureStream exists on HTMLCanvasElement in modern browsers
+  const canvasStream: MediaStream = canvas.captureStream(fps);
+
+  // Build the combined stream — add audio track BEFORE creating MediaRecorder
+  const combinedStream = new MediaStream();
+  canvasStream.getVideoTracks().forEach((t) => combinedStream.addTrack(t));
+  if (audioDest) {
+    audioDest.stream.getAudioTracks().forEach((t) => combinedStream.addTrack(t));
+  }
+
+  // ─── MediaRecorder ─────────────────────────────────────────────────────────
+  const recorderOptions: MediaRecorderOptions = { mimeType };
+  try {
+    // Only add bitrate hints if supported (some browsers reject unknown options)
+    recorderOptions.videoBitsPerSecond = Math.min(8_000_000, width * height * fps * 0.15);
+    if (audioDest) {
+      recorderOptions.audioBitsPerSecond = 128_000;
+    }
+  } catch { /* ignore */ }
+
+  const recorder = new MediaRecorder(combinedStream, recorderOptions);
 
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
@@ -479,9 +571,20 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
   };
 
   return new Promise<GenResult>(async (resolve, reject) => {
-    recorder.onstop = () => {
+    let startTime = Date.now();
+
+    recorder.onstop = async () => {
       try {
-        const blob = new Blob(chunks, { type: mimeType });
+        let blob = new Blob(chunks, { type: mimeType });
+        if (opts.format === "webm") {
+          try {
+            const fixWebM = (await import("fix-webm-duration")).default;
+            const duration = Date.now() - startTime;
+            blob = await fixWebM(blob, duration);
+          } catch (e) {
+            console.error("Failed to fix WebM duration:", e);
+          }
+        }
         const url = URL.createObjectURL(blob);
         onProgress?.(100, "Done");
         resolve({ blob, url, mimeType, ext });
@@ -493,6 +596,7 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
     recorder.onerror = (e: any) => reject(e?.error || new Error("Recorder error"));
 
     try {
+      startTime = Date.now();
       recorder.start(1000);
       onProgress?.(0, "Starting...");
 
@@ -509,9 +613,26 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
         }
       }
 
+      let currentSlideIdx = 0;
       let elapsedMs = 0;
 
+      const renderFrame = async (activeWordIdx: number, currentTimeMs: number) => {
+        if (bgVideo) {
+          bgVideo.currentTime = (currentTimeMs / 1000) % (bgVideo.duration || 1);
+          await new Promise<void>((resolve) => {
+            const onSeeked = () => {
+              bgVideo!.removeEventListener("seeked", onSeeked);
+              resolve();
+            };
+            bgVideo!.addEventListener("seeked", onSeeked);
+            setTimeout(resolve, 100);
+          });
+        }
+        drawSlide(ctx, opts.slides[currentSlideIdx], opts, activeWordIdx, bgImage, bgVideo);
+      };
+
       for (let s = 0; s < opts.slides.length; s++) {
+        currentSlideIdx = s;
         const slide = opts.slides[s];
         const statusText = `Rendering slide ${s + 1}/${opts.slides.length}`;
         onProgress?.(Math.round((elapsedMs / totalDurationMs) * 100), statusText);
@@ -520,15 +641,15 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
         if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
           // Word-by-word with per-word audio
           for (let i = 0; i < slide.arabicWords.length; i++) {
-            drawSlide(ctx, slide, opts, i, bgImage);
-            // Play word audio
+            await renderFrame(i, elapsedMs);
+            // Play word audio — connect via masterGain so audio is captured
             const word = slide.arabicWords[i];
             try {
               const buf = await fetchAudioBuffer(word.audio!, audioCtx);
-              if (audioCtx && audioDest && buf) {
+              if (audioCtx && masterGain && buf) {
                 const src = audioCtx.createBufferSource();
                 src.buffer = buf;
-                src.connect(audioDest);
+                src.connect(masterGain); // route through gain → dest → recorder
                 src.start();
                 const dur = buf.duration * 1000;
                 await new Promise((r) => setTimeout(r, dur + 150));
@@ -544,13 +665,13 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
             onProgress?.(Math.min(99, Math.round((elapsedMs / totalDurationMs) * 100)), statusText);
           }
         } else if (slide.audio) {
-          // Full ayah audio — play and animate word rotation
+          // Full ayah audio — play entire audio while animating word highlights
           try {
             const buf = await fetchAudioBuffer(slide.audio, audioCtx);
-            if (audioCtx && audioDest && buf) {
+            if (audioCtx && masterGain && buf) {
               const src = audioCtx.createBufferSource();
               src.buffer = buf;
-              src.connect(audioDest);
+              src.connect(masterGain); // route through gain → dest → recorder
               src.start();
               const dur = buf.duration * 1000;
               const wordCount = slide.arabicWords.length;
@@ -559,7 +680,7 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
               while (Date.now() - startMs < dur) {
                 const t = Date.now() - startMs;
                 const idx = Math.min(wordCount - 1, Math.floor(t / interval));
-                drawSlide(ctx, slide, opts, idx, bgImage);
+                await renderFrame(idx, elapsedMs + t);
                 await new Promise((r) => setTimeout(r, Math.min(100, interval)));
                 onProgress?.(
                   Math.min(99, Math.round(((elapsedMs + t) / totalDurationMs) * 100)),
@@ -568,27 +689,27 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
               }
               elapsedMs += dur;
             } else {
-              // No audio — just render for 3 seconds
-              drawSlide(ctx, slide, opts, -1, bgImage);
+              // No audio context — render static for the audio duration estimate
+              await renderFrame(-1, elapsedMs);
               await new Promise((r) => setTimeout(r, 3000));
               elapsedMs += 3000;
             }
           } catch {
-            drawSlide(ctx, slide, opts, -1, bgImage);
+            await renderFrame(-1, elapsedMs);
             await new Promise((r) => setTimeout(r, 3000));
             elapsedMs += 3000;
           }
         } else {
           // No audio — render static for 3 seconds
-          drawSlide(ctx, slide, opts, -1, bgImage);
+          await renderFrame(-1, elapsedMs);
           await new Promise((r) => setTimeout(r, 3000));
           elapsedMs += 3000;
         }
       }
 
       onProgress?.(99, "Finalizing...");
-      // Wait a bit for last frames to flush
-      await new Promise((r) => setTimeout(r, 500));
+      // Wait for the final audio to flush through the pipeline before stopping
+      await new Promise((r) => setTimeout(r, 800));
       recorder.stop();
       if (audioCtx) {
         try { await audioCtx.close(); } catch {}

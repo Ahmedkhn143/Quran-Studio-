@@ -39,6 +39,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SimpleSelect } from "@/components/dashboard/simple-select";
 import { toast } from "sonner";
 import { RECITERS, TRANSLATIONS, type SurahListItem } from "@/lib/quran-api";
+import {
+  generateQuranVideo,
+  type BackgroundSpec,
+  type SlideData,
+} from "@/lib/video-generator";
 
 interface AyahData {
   numberInSurah: number;
@@ -128,9 +133,18 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
 
   // Text style
   const [textSize, setTextSize] = useState<typeof TEXT_SIZES[number]["id"]>("lg");
+  const [arabicTextSize, setArabicTextSize] = useState(48);
+  const [translationTextSize, setTranslationTextSize] = useState(20);
+  const [arabicFont, setArabicFont] = useState<"quran" | "naskh" | "amiri">("quran");
+  const [translationFont, setTranslationFont] = useState<"sans" | "urdu" | "noto-sans" | "amiri">("sans");
   const [textPosition, setTextPosition] = useState<typeof TEXT_POSITIONS[number]["id"]>("center");
   const [textColor, setTextColor] = useState("#ffffff");
   const [showTranslationOverlay, setShowTranslationOverlay] = useState(true);
+  const [renderingPreview, setRenderingPreview] = useState(false);
+  const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
+  const [renderedVideoError, setRenderedVideoError] = useState<string | null>(null);
+  const [renderedVideoProgress, setRenderedVideoProgress] = useState(0);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Volume
   const [volume, setVolume] = useState(80);
@@ -313,6 +327,29 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
     : { background: currentBg?.css ?? PRESET_BACKGROUNDS[0].css };
 
   const textSizeValue = TEXT_SIZES.find((t) => t.id === textSize)?.value ?? "2.25rem";
+  const arabicFontFamily =
+    arabicFont === "naskh"
+      ? "var(--font-arabic-naskh), serif"
+      : arabicFont === "amiri"
+      ? "var(--font-arabic), serif"
+      : "var(--font-quran), serif";
+
+  const translationFontFamily =
+    translationFont === "urdu"
+      ? "var(--font-urdu), serif"
+      : translationFont === "noto-sans"
+      ? "var(--font-latin-clean), sans-serif"
+      : translationFont === "amiri"
+      ? "var(--font-arabic), serif"
+      : "var(--font-sans), sans-serif";
+  const textSizePx = arabicTextSize;
+  const translationLangCode = translation.split(".")[0] || "en";
+  const translationClass =
+    translationLangCode === "ur"
+      ? "translation-ur"
+      : translationLangCode === "ar"
+      ? "translation-ar"
+      : "translation-en";
 
   const handlePlay = () => {
     if (!ayahData) return;
@@ -337,6 +374,68 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
       setSelectedAyah(1);
     }
   };
+
+  const handleGeneratePreviewVideo = async () => {
+    if (!ayahData) {
+      toast.error("Ayah not loaded yet");
+      return;
+    }
+
+    setRenderedVideoError(null);
+    setRenderedVideoProgress(0);
+    setRenderingPreview(true);
+
+    if (renderedVideoUrl) {
+      URL.revokeObjectURL(renderedVideoUrl);
+      setRenderedVideoUrl(null);
+    }
+
+    const currentBackground: BackgroundSpec = aiBgUrl && bgId === "__ai__"
+      ? { type: "image", imageUrl: aiBgUrl, opacity: 100 }
+      : { type: "preset", cssValue: currentBg?.css ?? PRESET_BACKGROUNDS[0].css, opacity: 100 };
+
+    const slide: SlideData = {
+      arabicWords: ayahData.words.map((w) => ({ text: w.text, audio: w.audio })),
+      translation: showTranslationOverlay && showTranslation ? ayahData.translation : undefined,
+      surahName: currentSurah?.englishName || "Quran",
+      ayahNumber: selectedAyah,
+      audio: ayahData.audio,
+    };
+
+    try {
+      const result = await generateQuranVideo({
+        slides: [slide],
+        background: currentBackground,
+        textColor,
+        textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+        textSize: Math.max(38, Math.round((textSizePx / 900) * 720)),
+        showTranslation: showTranslationOverlay && showTranslation,
+        width: 1280,
+        height: 720,
+        fps: 30,
+        format: "webm",
+        onProgress: (pct) => setRenderedVideoProgress(pct),
+        arabicFont: arabicFontFamily,
+        translationFont: translationFontFamily,
+      });
+
+      setRenderedVideoUrl(result.url);
+      toast.success("Preview video ready");
+    } catch (e: any) {
+      setRenderedVideoError(e?.message || "Failed to render preview video");
+      toast.error(e?.message || "Video preview generation failed");
+    } finally {
+      setRenderingPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (renderedVideoUrl) {
+        URL.revokeObjectURL(renderedVideoUrl);
+      }
+    };
+  }, [renderedVideoUrl]);
 
   const handlePrev = () => {
     if (selectedAyah > 1) {
@@ -491,77 +590,96 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
                   )}
                 </AnimatePresence>
 
-                {/* Verse content */}
-                <div
-                  className={`relative flex h-full flex-col items-center px-6 ${positionClass}`}
-                >
-                  {/* Arabic */}
+                {renderedVideoUrl ? (
+                  <div className="relative h-full w-full bg-black/90">
+                    <video
+                      ref={previewVideoRef}
+                      src={renderedVideoUrl}
+                      controls
+                      playsInline
+                      className="h-full w-full object-contain"
+                    />
+                    <div className="absolute left-3 top-3 rounded-lg border border-white/15 bg-black/55 px-2.5 py-1 backdrop-blur">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--gold)]">
+                        Generated Preview
+                      </span>
+                    </div>
+                  </div>
+                ) : (
                   <div
-                    className="text-center font-quran"
-                    style={{
-                      fontFamily: "var(--font-quran), var(--font-amiri), serif",
-                      direction: "rtl",
-                      fontSize: textSizeValue,
-                      lineHeight: 1.6,
-                      color: textColor,
-                      textShadow: "0 2px 12px rgba(0,0,0,0.6), 0 0 1px rgba(0,0,0,0.4)",
-                    }}
+                    className={`relative flex h-full flex-col items-center px-6 ${positionClass}`}
                   >
-                    {ayahData?.words?.length ? (
-                      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-                        {ayahData.words.map((w, i) => (
-                          <motion.span
-                            key={i}
-                            animate={{
-                              color: activeWordIdx === i ? "#d4a017" : textColor,
-                              scale: activeWordIdx === i ? 1.12 : 1,
-                              textShadow:
-                                activeWordIdx === i
-                                  ? "0 0 24px rgba(212,160,23,0.8), 0 2px 12px rgba(0,0,0,0.6)"
-                                  : "0 2px 12px rgba(0,0,0,0.6)",
-                            }}
-                            transition={{ duration: 0.25 }}
-                            className="inline-block cursor-pointer"
-                            onClick={() => {
-                              if (w.audio) {
-                                new Audio(w.audio).play().catch(() => {});
-                              }
-                            }}
+                    {/* Arabic */}
+                    <div
+                      className="text-center font-quran"
+                      style={{
+                        fontFamily: arabicFontFamily,
+                        direction: "rtl",
+                        fontSize: `${arabicTextSize}px`,
+                        lineHeight: 1.6,
+                        color: textColor,
+                        textShadow: "0 2px 12px rgba(0,0,0,0.6), 0 0 1px rgba(0,0,0,0.4)",
+                      }}
+                    >
+                      {ayahData?.words?.length ? (
+                        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                          {ayahData.words.map((w, i) => (
+                            <motion.span
+                              key={i}
+                              animate={{
+                                color: activeWordIdx === i ? "#d4a017" : textColor,
+                                scale: activeWordIdx === i ? 1.12 : 1,
+                                textShadow:
+                                  activeWordIdx === i
+                                    ? "0 0 24px rgba(212,160,23,0.8), 0 2px 12px rgba(0,0,0,0.6)"
+                                    : "0 2px 12px rgba(0,0,0,0.6)",
+                              }}
+                              transition={{ duration: 0.25 }}
+                              className="inline-block cursor-pointer"
+                              onClick={() => {
+                                if (w.audio) {
+                                  new Audio(w.audio).play().catch(() => {});
+                                }
+                              }}
+                            >
+                              {w.text}
+                            </motion.span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="h-8 w-64 rounded shimmer bg-white/10" />
+                          <div className="h-8 w-48 rounded shimmer bg-white/10" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Translation overlay */}
+                    {showTranslationOverlay &&
+                      showTranslation &&
+                      ayahData?.translation && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-6 max-w-2xl rounded-xl border border-white/15 bg-black/40 px-5 py-3 backdrop-blur"
+                        >
+                          <p 
+                            className={`text-center text-sm font-medium leading-relaxed text-white/90 sm:text-base ${translationClass}`}
+                          style={{ fontFamily: translationFontFamily, fontSize: `${translationTextSize}px` }}
                           >
-                            {w.text}
-                          </motion.span>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="h-8 w-64 rounded shimmer bg-white/10" />
-                        <div className="h-8 w-48 rounded shimmer bg-white/10" />
-                      </div>
-                    )}
-                  </div>
+                            {ayahData.translation}
+                          </p>
+                        </motion.div>
+                      )}
 
-                  {/* Translation overlay */}
-                  {showTranslationOverlay &&
-                    showTranslation &&
-                    ayahData?.translation && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-6 max-w-2xl rounded-xl border border-white/15 bg-black/40 px-5 py-3 backdrop-blur"
-                      >
-                        <p className="text-center text-sm font-medium leading-relaxed text-white/90 sm:text-base">
-                          {ayahData.translation}
-                        </p>
-                      </motion.div>
-                    )}
-
-                  {/* Top-right meta */}
-                  <div className="absolute right-3 top-3 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1 backdrop-blur">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--gold)]">
-                      {currentSurah?.englishName} · {selectedAyah}:{currentSurah?.numberOfAyahs}
-                    </span>
+                    {/* Top-right meta */}
+                    <div className="absolute right-3 top-3 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1 backdrop-blur">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--gold)]">
+                        {currentSurah?.englishName} · {selectedAyah}:{currentSurah?.numberOfAyahs}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Progress bar */}
                 <div className="absolute inset-x-0 bottom-0 h-1 bg-black/30">
@@ -642,22 +760,51 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
             </div>
 
             {/* Export bar */}
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
-              <span className="mr-auto text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Export
-              </span>
-              {["MP4 4K", "PNG", "JPEG", "SRT", "Audio ZIP"].map((fmt) => (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-foreground">Ready to export?</span>
+                <span className="text-[10px] text-muted-foreground">Unlock 4K MP4 export, SRT subtitles, and multiple slides in the full editor.</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  key={fmt}
-                  variant="outline"
+                  onClick={handleGeneratePreviewVideo}
                   size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={() => toast.success(`Preparing ${fmt} export...`)}
+                  disabled={loading || renderingPreview || !ayahData}
+                  className="bg-amber-600 hover:bg-amber-700 text-black gap-1.5 text-xs shadow-md"
                 >
-                  <Download className="h-3 w-3" />
-                  {fmt}
+                  {renderingPreview ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
+                  {renderingPreview ? `Rendering ${renderedVideoProgress}%` : "Generate Preview Video"}
                 </Button>
-              ))}
+                {renderedVideoUrl && (
+                  <Button
+                    onClick={() => {
+                      if (renderedVideoUrl) {
+                        URL.revokeObjectURL(renderedVideoUrl);
+                        setRenderedVideoUrl(null);
+                        setRenderedVideoError(null);
+                      }
+                    }}
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                  >
+                    Back to Live Preview
+                  </Button>
+                )}
+                {onOpenDashboard && (
+                  <Button
+                    onClick={onOpenDashboard}
+                    size="sm"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 text-xs shadow-md"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Generate Video (Full Editor)
+                  </Button>
+                )}
+              </div>
+              {renderedVideoError && (
+                <p className="w-full text-[11px] text-red-600 dark:text-red-400">{renderedVideoError}</p>
+              )}
             </div>
           </div>
 
@@ -669,7 +816,7 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-700/10 text-emerald-700 dark:text-[var(--gold)]">
                   <Search className="h-3.5 w-3.5" />
                 </div>
-                <h3 className="text-sm font-semibold text-foreground">Verse</h3>
+                <h3 className="text-sm font-semibold text-foreground">Select Verse</h3>
               </div>
 
               <div className="relative">
@@ -681,7 +828,7 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
                 />
               </div>
 
-              <ScrollArea className="h-44 rounded-lg border border-border">
+              <ScrollArea className="h-40 rounded-lg border border-border">
                 <div className="p-1">
                   {filteredSurahs.length === 0 ? (
                     <div className="p-4 text-center text-xs text-muted-foreground">
@@ -695,7 +842,7 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
                           setSelectedSurah(s.number);
                           setSelectedAyah(1);
                         }}
-                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors ${
+                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left transition-colors ${
                           selectedSurah === s.number
                             ? "bg-emerald-700/10 text-foreground"
                             : "hover:bg-accent/40 text-muted-foreground"
@@ -715,7 +862,7 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
                             {s.englishName}
                           </span>
                         </div>
-                        <span className="font-quran text-sm text-muted-foreground" style={{ fontFamily: "var(--font-quran)" }}>
+                        <span className="font-quran text-xs text-muted-foreground" style={{ fontFamily: "var(--font-quran)" }}>
                           {s.name}
                         </span>
                       </button>
@@ -762,290 +909,214 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
               </div>
             </div>
 
-            {/* Settings tabs */}
-            <Tabs defaultValue="audio" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="audio" className="text-xs">
-                  <Mic2 className="mr-1.5 h-3.5 w-3.5" />
-                  Audio
-                </TabsTrigger>
-                <TabsTrigger value="bg" className="text-xs">
-                  <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                  Background
-                </TabsTrigger>
-                <TabsTrigger value="text" className="text-xs">
-                  <Type className="mr-1.5 h-3.5 w-3.5" />
-                  Text
-                </TabsTrigger>
-              </TabsList>
+            {/* Minimum Quick Customization Options */}
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 pb-1 border-b border-border">
+                <Settings2 className="h-4 w-4 text-emerald-700" />
+                <h3 className="text-sm font-semibold text-foreground">Quick Style</h3>
+              </div>
 
-              {/* Audio tab */}
-              <TabsContent value="audio" className="mt-3">
-                <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                        Reciter
-                      </Label>
-                      <SimpleSelect
-                        value={reciter}
-                        onValueChange={setReciter}
-                        options={RECITERS.map((r) => ({
-                          value: r.id,
-                          label: r.englishName,
-                          sublabel: r.style,
-                        }))}
-                      />
-                    </div>
+              {/* Reciter */}
+              <div>
+                <Label className="mb-1 block text-[11px] font-medium text-muted-foreground">Reciter</Label>
+                <SimpleSelect
+                  value={reciter}
+                  onValueChange={setReciter}
+                  options={RECITERS.slice(0, 5).map((r) => ({
+                    value: r.id,
+                    label: r.englishName,
+                    sublabel: r.style,
+                  }))}
+                />
+              </div>
 
-                    <div>
-                      <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                        Translation
-                      </Label>
-                      <SimpleSelect
-                        value={translation}
-                        onValueChange={setTranslation}
-                        options={TRANSLATIONS.map((t) => ({
-                          value: t.id,
-                          label: t.englishName,
-                          sublabel: t.language,
-                        }))}
-                      />
-                    </div>
+              {/* Translation language */}
+              <div>
+                <Label className="mb-1 block text-[11px] font-medium text-muted-foreground">Translation</Label>
+                <SimpleSelect
+                  value={translation}
+                  onValueChange={setTranslation}
+                  options={TRANSLATIONS.filter((t) => ["en", "ur", "fr", "es", "id", "tr", "ru", "bn"].includes(t.id.split(".")[0])).map((t) => ({
+                    value: t.id,
+                    label: t.englishName,
+                    sublabel: t.language,
+                  }))}
+                />
+              </div>
 
-                    <div className="space-y-2 pt-1">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="tr-switch" className="text-xs">
-                          Show translation overlay
-                        </Label>
-                        <Switch
-                          id="tr-switch"
-                          checked={showTranslation}
-                          onCheckedChange={setShowTranslation}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="tro-switch" className="text-xs">
-                          Translation visible in video
-                        </Label>
-                        <Switch
-                          id="tro-switch"
-                          checked={showTranslationOverlay}
-                          onCheckedChange={setShowTranslationOverlay}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="trt-switch" className="text-xs">
-                          Show transliteration
-                        </Label>
-                        <Switch
-                          id="trt-switch"
-                          checked={showTransliteration}
-                          onCheckedChange={setShowTransliteration}
-                        />
-                      </div>
-                    </div>
-                  </div>
+              {/* Arabic font style */}
+              <div>
+                <Label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Arabic Font</Label>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => setArabicFont("quran")}
+                    className={`rounded-md border py-1 text-[10px] font-medium transition-all ${
+                      arabicFont === "quran"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Quran
+                  </button>
+                  <button
+                    onClick={() => setArabicFont("naskh")}
+                    className={`rounded-md border py-1 text-[10px] font-medium transition-all ${
+                      arabicFont === "naskh"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Naskh
+                  </button>
+                  <button
+                    onClick={() => setArabicFont("amiri")}
+                    className={`rounded-md border py-1 text-[10px] font-medium transition-all ${
+                      arabicFont === "amiri"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Amiri
+                  </button>
                 </div>
-              </TabsContent>
+              </div>
 
-              {/* Background tab */}
-              <TabsContent value="bg" className="mt-3">
-                <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      Preset backgrounds
-                    </Label>
-                    <Badge variant="outline" className="text-[10px]">
-                      {PRESET_BACKGROUNDS.length} presets
-                    </Badge>
-                  </div>
+              {/* Translation Font */}
+              <div>
+                <Label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Translation Font</Label>
+                <div className="grid grid-cols-4 gap-1">
+                  <button
+                    onClick={() => setTranslationFont("sans")}
+                    className={`rounded-md border py-1 text-[9px] font-medium transition-all ${
+                      translationFont === "sans"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Inter
+                  </button>
+                  <button
+                    onClick={() => setTranslationFont("noto-sans")}
+                    className={`rounded-md border py-1 text-[9px] font-medium transition-all ${
+                      translationFont === "noto-sans"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Noto
+                  </button>
+                  <button
+                    onClick={() => setTranslationFont("urdu")}
+                    className={`rounded-md border py-1 text-[9px] font-medium transition-all ${
+                      translationFont === "urdu"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Urdu
+                  </button>
+                  <button
+                    onClick={() => setTranslationFont("amiri")}
+                    className={`rounded-md border py-1 text-[9px] font-medium transition-all ${
+                      translationFont === "amiri"
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent/30"
+                    }`}
+                  >
+                    Amiri
+                  </button>
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    {PRESET_BACKGROUNDS.map((b) => (
-                      <button
-                        key={b.id}
-                        onClick={() => {
-                          setBgId(b.id);
-                          setAiBgUrl(null);
-                        }}
-                        className={`group relative aspect-video overflow-hidden rounded-lg border-2 transition-all ${
-                          bgId === b.id
-                            ? "border-[var(--gold)] ring-2 ring-[var(--gold)]/30"
-                            : "border-border hover:border-[var(--gold)]/50"
-                        }`}
-                        style={{ background: b.css }}
-                      >
-                        <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/70 to-transparent p-1.5">
-                          <span className="text-[9px] font-semibold uppercase tracking-wider text-white">
-                            {b.name}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* AI Generator */}
-                  <div className="mt-4 border-t border-border pt-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--gold)]/20 to-amber-500/10 text-[var(--gold)]">
-                        <Wand2 className="h-3.5 w-3.5" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-semibold text-foreground">
-                          AI Background Generator
-                        </h4>
-                        <p className="text-[10px] text-muted-foreground">
-                          Describe any scene, get a unique background.
-                        </p>
-                      </div>
-                    </div>
-
-                    <Input
-                      placeholder="e.g. mosque at sunset, desert dunes..."
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") generateAIBackground();
+              {/* Basic Background Presets (only first 3) */}
+              <div>
+                <Label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Background Preset</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {PRESET_BACKGROUNDS.slice(0, 3).map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setBgId(b.id);
+                        setAiBgUrl(null);
                       }}
-                      className="mb-2 h-9 text-sm"
-                    />
-
-                    <div className="flex flex-wrap gap-1.5">
-                      {["Mosque at sunset", "Desert night", "Mountain lake", "Garden of palms"].map(
-                        (p) => (
-                          <button
-                            key={p}
-                            onClick={() => setAiPrompt(p)}
-                            className="rounded-full border border-border bg-background px-2.5 py-0.5 text-[10px] text-muted-foreground hover:border-[var(--gold)]/50 hover:text-foreground"
-                          >
-                            {p}
-                          </button>
-                        )
-                      )}
-                    </div>
-
-                    <Button
-                      onClick={generateAIBackground}
-                      disabled={aiLoading}
-                      className="mt-2 w-full gap-2 bg-gradient-to-r from-[var(--gold)] to-amber-500 text-emerald-950 hover:from-amber-400 hover:to-amber-500"
-                      size="sm"
+                      className={`group relative aspect-video overflow-hidden rounded-lg border-2 transition-all ${
+                        bgId === b.id
+                          ? "border-[var(--gold)] ring-1 ring-[var(--gold)]/30"
+                          : "border-border hover:border-[var(--gold)]/50"
+                      }`}
+                      style={{ background: b.css }}
                     >
-                      {aiLoading ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-3.5 w-3.5" />
-                      )}
-                      {aiLoading ? "Generating..." : "Generate"}
-                    </Button>
+                      <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/80 to-transparent p-1">
+                        <span className="text-[8px] font-medium uppercase tracking-wider text-white">
+                          {b.name.split(" ")[0]}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Basic Text Sizes */}
+              <div className="space-y-2">
+                <Label className="mb-1 block text-[11px] font-medium text-muted-foreground">Text Size</Label>
+                <div className="grid grid-cols-3 gap-1">
+                  {TEXT_SIZES.slice(0, 3).map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setTextSize(t.id);
+                        if (t.id === "sm") { setArabicTextSize(32); setTranslationTextSize(16); }
+                        else if (t.id === "md") { setArabicTextSize(48); setTranslationTextSize(20); }
+                        else if (t.id === "lg") { setArabicTextSize(64); setTranslationTextSize(24); }
+                      }}
+                      className={`rounded-md border py-1 text-[11px] font-medium transition-all ${
+                        textSize === t.id
+                          ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                          : "border-border text-muted-foreground hover:bg-accent/30"
+                      }`}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1 pt-1">
+                  <div className="flex justify-between text-[9px] text-muted-foreground">
+                    <span>Arabic Size:</span>
+                    <span>{arabicTextSize}px</span>
                   </div>
-                </div>
-              </TabsContent>
-
-              {/* Text tab */}
-              <TabsContent value="text" className="mt-3">
-                <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="mb-2 block text-xs font-medium text-muted-foreground">
-                        Text size
-                      </Label>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {TEXT_SIZES.map((t) => (
-                          <button
-                            key={t.id}
-                            onClick={() => setTextSize(t.id)}
-                            className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-all ${
-                              textSize === t.id
-                                ? "border-[var(--gold)] bg-[var(--gold-soft)]/40 text-foreground"
-                                : "border-border text-muted-foreground hover:bg-accent/40"
-                            }`}
-                          >
-                            {t.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="mb-2 block text-xs font-medium text-muted-foreground">
-                        Position
-                      </Label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {TEXT_POSITIONS.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => setTextPosition(p.id)}
-                            className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-all ${
-                              textPosition === p.id
-                                ? "border-[var(--gold)] bg-[var(--gold-soft)]/40 text-foreground"
-                                : "border-border text-muted-foreground hover:bg-accent/40"
-                            }`}
-                          >
-                            {p.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="mb-2 block text-xs font-medium text-muted-foreground">
-                        Text color
-                      </Label>
-                      <div className="flex flex-wrap gap-2">
-                        {["#ffffff", "#d4a017", "#fbbf24", "#10b981", "#60a5fa", "#f87171"].map(
-                          (c) => (
-                            <button
-                              key={c}
-                              onClick={() => setTextColor(c)}
-                              className={`h-8 w-8 rounded-full border-2 transition-all ${
-                                textColor === c
-                                  ? "scale-110 border-foreground"
-                                  : "border-border hover:scale-105"
-                              }`}
-                              style={{ background: c }}
-                              aria-label={`Color ${c}`}
-                            />
-                          )
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-border bg-background/50 p-3">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Layers className="h-3.5 w-3.5" />
-                        <span>Design one ayah, apply to all</span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-full text-xs"
-                        onClick={() => toast.success("Settings applied to all ayahs in this surah")}
-                      >
-                        Apply to all ayahs
-                      </Button>
-                    </div>
+                  <Slider
+                    value={[arabicTextSize]}
+                    onValueChange={(v) => setArabicTextSize(v[0])}
+                    min={24}
+                    max={96}
+                    step={1}
+                  />
+                  <div className="flex justify-between text-[9px] text-muted-foreground pt-1">
+                    <span>Translation Size:</span>
+                    <span>{translationTextSize}px</span>
                   </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            {/* Quick info */}
-            <div className="rounded-2xl border border-border bg-gradient-to-br from-emerald-950 to-emerald-900 p-4 text-white shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--gold)]/20 text-[var(--gold)]">
-                  <Film className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold">Pro Tip</h4>
-                  <p className="mt-1 text-xs leading-relaxed text-white/80">
-                    Click any Arabic word in the preview to hear it spoken
-                    individually — great for pronunciation practice and timing
-                    fine-tuning.
-                  </p>
+                  <Slider
+                    value={[translationTextSize]}
+                    onValueChange={(v) => setTranslationTextSize(v[0])}
+                    min={12}
+                    max={64}
+                    step={1}
+                  />
                 </div>
               </div>
             </div>
+
+            {/* High-visibility Prominent CTA */}
+            {onOpenDashboard && (
+              <Button
+                onClick={onOpenDashboard}
+                size="lg"
+                className="w-full bg-gradient-to-r from-emerald-800 to-emerald-950 text-white font-semibold hover:from-emerald-900 hover:to-black gap-2 shadow-lg shadow-emerald-950/20 py-6"
+              >
+                <Sparkles className="h-4.5 w-4.5 text-[var(--gold)] animate-pulse" />
+                Customize in Full Editor →
+              </Button>
+            )}
           </div>
         </div>
       </div>

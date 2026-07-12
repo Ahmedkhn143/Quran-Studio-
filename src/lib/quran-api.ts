@@ -14,6 +14,11 @@ const QURAN_COM = "https://api.quran.com/api/v4";
 const WORD_AUDIO_CDN = "https://audio.qurancdn.com";
 const AYAH_AUDIO_CDN = "https://cdn.islamic.network/quran/audio";
 
+function proxiedAudioUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  return `/api/audio?src=${encodeURIComponent(url)}`;
+}
+
 export interface Surah {
   number: number;
   name: string;
@@ -64,6 +69,13 @@ export const RECITERS: Reciter[] = [
   { id: "ar.shaatree", name: "أبو بكر الشاطري", englishName: "Abu Bakr Ash-Shaatree", style: "Murattal" },
   { id: "ar.ahmedajamy", name: "أحمد العجمي", englishName: "Ahmed ibn Ali al-Ajamy", style: "Murattal" },
   { id: "ar.aliajaber", name: "علي جابر", englishName: "Ali Jaber", style: "Murattal" },
+  { id: "ar.saadghamidi", name: "سعد الغامدي", englishName: "Saad Al-Ghamdi", style: "Murattal" },
+  { id: "ar.yasseraldossari", name: "ياسر الدوسري", englishName: "Yasser Al-Dossari", style: "Murattal" },
+  { id: "ar.khaledaljaleel", name: "خالد الجليل", englishName: "Khaled Al-Jaleel", style: "Murattal" },
+  { id: "ar.nasseralqatami", name: "ناصر القطامي", englishName: "Nasser Al-Qatami", style: "Murattal" },
+  { id: "ar.farisabbad", name: "فارس عباد", englishName: "Faris Abbad", style: "Murattal" },
+  { id: "ar.salahalbudair", name: "صلاح البدير", englishName: "Salah Al-Budair", style: "Murattal" },
+  { id: "ar.alhuthaify", name: "علي الحذيفي", englishName: "Ali Al-Huthaify", style: "Murattal" },
 ];
 
 export const TRANSLATIONS: TranslationEdition[] = [
@@ -159,9 +171,9 @@ export async function fetchAyah(
       .filter((w: any) => w.char_type_name === "word")
       .map((w: any) => ({
         text: w.text_uthmani || w.text || "",
-        audio: w.audio_url
-          ? `${WORD_AUDIO_CDN}/${w.audio_url}`
-          : undefined,
+        audio: proxiedAudioUrl(
+          w.audio_url ? `${WORD_AUDIO_CDN}/${w.audio_url}` : undefined
+        ),
         translation: w.translation?.text || undefined,
         transliteration: w.transliteration?.text || undefined,
       }));
@@ -196,6 +208,8 @@ export async function fetchAyah(
         ayahAudio = `${AYAH_AUDIO_CDN}/128/${reciterId}/${globalNumber}.mp3`;
       }
     }
+
+    ayahAudio = proxiedAudioUrl(ayahAudio) || "";
 
     // 3) Translation text from alquran.cloud
     let translation: string | undefined;

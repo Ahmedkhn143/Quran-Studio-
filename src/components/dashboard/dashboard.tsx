@@ -123,6 +123,15 @@ const TEXT_PRESETS = [
   { id: "glow", name: "Glow", color: "#ffd700", shadow: "0 0 20px rgba(255,215,0,0.6), 0 0 40px rgba(255,215,0,0.3)" },
   { id: "outline", name: "Outline", color: "#ffffff", shadow: "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000" },
   { id: "cinema", name: "Cinema", color: "#ffffff", shadow: "0 8px 24px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.5)" },
+  { id: "golden_glow", name: "Royal Gold", color: "#ffd700", shadow: "0 2px 10px rgba(212,160,23,0.8), 0 4px 15px rgba(0,0,0,0.9)" },
+  { id: "neon_cyan", name: "Neon Cyan", color: "#00f2fe", shadow: "0 0 10px rgba(0,242,254,0.6), 0 0 20px rgba(0,242,254,0.3)" },
+  { id: "sunset_rose", name: "Sunset Rose", color: "#ff758c", shadow: "0 2px 12px rgba(255,117,140,0.5), 0 4px 8px rgba(0,0,0,0.6)" },
+];
+
+const PRESET_VIDEOS = [
+  { id: "v_starry", name: "Starry Sky", url: "https://player.vimeo.com/external/371433846.sd.mp4?s=236da2f3ccee8d3d2a09c2a611956637b3f9ff69&profile_id=139&oauth2_token_id=57447761" },
+  { id: "v_particles", name: "Glow Loop", url: "https://player.vimeo.com/external/451837836.sd.mp4?s=d1d8858349285098ad8e92a2a0d922cfb940989f&profile_id=139&oauth2_token_id=57447761" },
+  { id: "v_water", name: "Dawn Water", url: "https://player.vimeo.com/external/403842180.sd.mp4?s=4e4d588523c14d5e90d8985f39f906f30d074b1e&profile_id=139&oauth2_token_id=57447761" }
 ];
 
 export function Dashboard({ onClose }: { onClose: () => void }) {
@@ -148,7 +157,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [volume, setVolume] = useState(80);
 
   // --- Background state ---
-  const [bgTab, setBgTab] = useState<"upload" | "ai" | "preset" | "gradient" | "color">("preset");
+  const [bgTab, setBgTab] = useState<"upload" | "ai" | "preset" | "gradient" | "color" | "video">("preset");
   const [bgId, setBgId] = useState<string>("sunset");
   const [aiBgUrl, setAiBgUrl] = useState<string | null>(null);
   const [uploadedBgUrl, setUploadedBgUrl] = useState<string | null>(null);
@@ -159,14 +168,31 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
+  const [customAudioName, setCustomAudioName] = useState<string | null>(null);
   const [bgOpacity, setBgOpacity] = useState(100);
+
+  // Custom gradient state
+  const [customGradientStart, setCustomGradientStart] = useState("#8b3a2a");
+  const [customGradientEnd, setCustomGradientEnd] = useState("#d4a017");
+  const [customGradientAngle, setCustomGradientAngle] = useState(135);
 
   // --- Text style ---
   const [textSize, setTextSize] = useState("lg");
+  const [arabicTextSize, setArabicTextSize] = useState(48);
+  const [translationTextSize, setTranslationTextSize] = useState(24);
   const [textColor, setTextColor] = useState("#ffffff");
   const [textShadow, setTextShadow] = useState("0 2px 8px rgba(0,0,0,0.5)");
   const [textPreset, setTextPreset] = useState("clean");
   const [showTranslation, setShowTranslation] = useState(true);
+  const [arabicFont, setArabicFont] = useState<"quran" | "naskh" | "amiri">("quran");
+  const [translationFont, setTranslationFont] = useState<"sans" | "urdu" | "noto-sans" | "amiri">("sans");
+
+  // Watermark/Overlay Text
+  const [customOverlayText, setCustomOverlayText] = useState("");
+  const [customOverlayTextColor, setCustomOverlayTextColor] = useState("#ffffff");
+  const [customOverlayTextSize, setCustomOverlayTextSize] = useState(20);
+  const [customOverlayTextPosition, setCustomOverlayTextPosition] = useState<"top" | "bottom">("bottom");
 
   // --- Video output ---
   const [aspectRatio, setAspectRatio] = useState("16:9");
@@ -230,6 +256,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     return () => { document.body.style.overflow = ""; };
   }, []);
 
+  // Cleanup object URL for uploaded custom audio
+  useEffect(() => {
+    return () => {
+      if (customAudioUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(customAudioUrl);
+      }
+    };
+  }, [customAudioUrl]);
+
   // Close on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -276,11 +311,19 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     }
   }, [fromAyah, toAyah, selectedSurah, reciter, translation]);
 
+  // Auto-reload slides when translation or reciter changes
+  useEffect(() => {
+    if (slides.length > 0) {
+      loadSlides({ silent: true });
+    }
+  }, [translation, reciter]);
+
   // Audio playback state for time display
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
 
   const currentAyah = slides[currentSlide];
+  const currentAudioSrc = customAudioUrl || currentAyah?.audio || "";
 
   // =====================
   // Audio playback — continuous full-ayah audio + word highlighting
@@ -303,7 +346,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     setCurrentTime(0);
     setAudioDuration(0);
 
-    if (!isPlaying || !currentAyah?.audio) {
+    if (!isPlaying || !currentAudioSrc) {
       return;
     }
 
@@ -316,7 +359,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
     // Create a single audio element for the entire ayah
     const audio = new Audio();
-    audio.src = currentAyah.audio;
+    audio.src = currentAudioSrc;
     audio.crossOrigin = "anonymous";
     audio.preload = "auto";
     audio.volume = volume / 100;
@@ -347,8 +390,16 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       if (session.cancelled) return;
       setActiveWordIdx(-1);
       setProgress(100);
-      setIsPlaying(false);
-      setTimeout(() => { if (!session.cancelled) setProgress(0); }, 800);
+      setTimeout(() => {
+        if (session.cancelled) return;
+        setProgress(0);
+        if (currentSlide < slides.length - 1) {
+          setCurrentSlide((s) => s + 1);
+          setIsPlaying(true);
+        } else {
+          setIsPlaying(false);
+        }
+      }, 800);
     };
 
     audio.onerror = () => {
@@ -387,7 +438,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       session.cancelled = true;
       try { audio.pause(); } catch {}
     };
-  }, [isPlaying, currentAyah, volume]);
+  }, [isPlaying, currentAyah, currentAudioSrc, volume]);
 
   // Format seconds as m:ss
   const formatTime = (s: number) => {
@@ -410,10 +461,11 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (json.ok) {
         setUploadedBgUrl(json.url);
-        setBgId("__upload__");
+        const isVideo = file.type.startsWith("video/");
+        setBgId(isVideo ? "__video_upload__" : "__upload__");
         setBgTab("upload");
         refreshUploads();
-        toast.success("Background uploaded!");
+        toast.success(isVideo ? "Video background uploaded!" : "Background uploaded!");
       } else {
         toast.error(json.error || "Upload failed");
       }
@@ -559,7 +611,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   });
 
   const currentBg = PRESET_BACKGROUNDS.find((b) => b.id === bgId);
-  const bgStyle: React.CSSProperties = bgId === "__ai__" && aiBgUrl
+  const currentVideo = PRESET_VIDEOS.find((v) => v.id === bgId);
+  const isVideoBg = bgId.startsWith("v_") || bgId === "__video_upload__";
+
+  const bgStyle: React.CSSProperties = isVideoBg
+    ? {}
+    : bgId === "__custom_grad__"
+    ? { background: `linear-gradient(${customGradientAngle}deg, ${customGradientStart}, ${customGradientEnd})` }
+    : bgId === "__ai__" && aiBgUrl
     ? { backgroundImage: `url(${aiBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
     : bgId === "__upload__" && uploadedBgUrl
     ? { backgroundImage: `url(${uploadedBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
@@ -567,6 +626,22 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
   const textSizeMap: Record<string, string> = { sm: "1.5rem", md: "2.25rem", lg: "3rem", xl: "3.75rem" };
   const textSizeValue = textSizeMap[textSize] ?? "2.25rem";
+
+  const arabicFontFamily =
+    arabicFont === "naskh"
+      ? "var(--font-arabic-naskh), serif"
+      : arabicFont === "amiri"
+      ? "var(--font-arabic), serif"
+      : "var(--font-quran), serif";
+
+  const translationFontFamily =
+    translationFont === "urdu"
+      ? "var(--font-urdu), serif"
+      : translationFont === "noto-sans"
+      ? "var(--font-latin-clean), sans-serif"
+      : translationFont === "amiri"
+      ? "var(--font-arabic), serif"
+      : "var(--font-sans), sans-serif";
 
   const aspectClass = ASPECT_RATIOS.find((a) => a.id === aspectRatio)?.className ?? "aspect-16-9";
 
@@ -820,11 +895,24 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                         className="hidden"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
-                          if (f) toast.info(`Audio "${f.name}" selected (demo only)`);
+                          if (f) {
+                            if (customAudioUrl?.startsWith("blob:")) {
+                              URL.revokeObjectURL(customAudioUrl);
+                            }
+                            const objectUrl = URL.createObjectURL(f);
+                            setCustomAudioUrl(objectUrl);
+                            setCustomAudioName(f.name);
+                            toast.success(`Using custom audio: ${f.name}`);
+                          }
                           e.target.value = "";
                         }}
                       />
                     </div>
+                    {customAudioName && (
+                      <p className="mt-1 text-[10px] text-emerald-700 dark:text-[var(--gold)]">
+                        Active: {customAudioName}
+                      </p>
+                    )}
                   </div>
 
                   {/* Translation */}
@@ -946,6 +1034,17 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
               className={`relative w-full max-w-3xl overflow-hidden rounded-xl shadow-2xl ${aspectClass}`}
               style={bgStyle}
             >
+              {/* Video background */}
+              {isVideoBg && (
+                <video
+                  src={bgId === "__video_upload__" ? uploadedBgUrl || "" : currentVideo?.url || ""}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              )}
               {/* Opacity overlay */}
               {bgOpacity < 100 && (
                 <div
@@ -1041,9 +1140,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   <div
                     className="text-center"
                     style={{
-                      fontFamily: "var(--font-quran), var(--font-amiri), serif",
+                      fontFamily: arabicFontFamily,
                       direction: "rtl",
-                      fontSize: textSizeValue,
+                      fontSize: `${arabicTextSize}px`,
                       lineHeight: 1.6,
                       color: textColor,
                       textShadow,
@@ -1078,7 +1177,10 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                       className="mt-6 max-w-2xl rounded-xl border border-white/15 bg-black/40 px-5 py-3 backdrop-blur"
                     >
-                      <p className="text-center text-sm font-medium leading-relaxed text-white/90 sm:text-base">
+                      <p 
+                        className="text-center text-sm font-medium leading-relaxed text-white/90 sm:text-base"
+                        style={{ fontFamily: translationFontFamily, fontSize: `${translationTextSize}px` }}
+                      >
                         {currentAyah.translation}
                       </p>
                     </motion.div>
@@ -1195,7 +1297,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
               </TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 thin-scroll">
+            <ScrollArea className="flex-1 h-[calc(100vh-7rem)] thin-scroll">
               {/* BACKGROUND TAB */}
               <TabsContent value="bg" className="p-4 mt-0 space-y-4">
                 {/* Background type tabs */}
@@ -1204,6 +1306,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     { id: "upload", label: "Upload", icon: Upload },
                     { id: "ai", label: "AI Gen", icon: Wand2 },
                     { id: "preset", label: "Presets", icon: ImageIcon },
+                    { id: "video", label: "Video Loop", icon: Film },
                     { id: "gradient", label: "Gradient", icon: Palette },
                     { id: "color", label: "Color", icon: SquareIcon },
                   ] as const).map((t) => (
@@ -1238,7 +1341,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       ) : (
                         <>
                           <Upload className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-                          <p className="text-xs font-medium text-foreground">Drop image here</p>
+                          <p className="text-xs font-medium text-foreground">Drop media file here</p>
                           <p className="mt-1 text-[10px] text-muted-foreground">
                             or{" "}
                             <button
@@ -1248,11 +1351,11 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                               browse files
                             </button>
                           </p>
-                          <p className="mt-1 text-[10px] text-muted-foreground">PNG, JPEG, WebP · max 10MB</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">Images or MP4/WebM videos · max 50MB</p>
                           <input
                             ref={fileInputRef}
                             type="file"
-                            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,video/mp4,video/webm"
                             className="hidden"
                             onChange={handleFileInput}
                           />
@@ -1263,45 +1366,52 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     {/* Uploaded backgrounds */}
                     <div>
                       <p className="mb-2 text-xs font-semibold text-foreground">
-                        My Backgrounds ({uploadedBgs.length})
+                        My Uploaded Assets ({uploadedBgs.length})
                       </p>
                       {uploadedBgs.length === 0 ? (
                         <p className="rounded-lg border border-border bg-muted/30 px-3 py-4 text-center text-[10px] text-muted-foreground">
-                          No uploaded backgrounds yet
+                          No uploaded assets yet
                         </p>
                       ) : (
                         <div className="grid grid-cols-3 gap-2">
-                          {uploadedBgs.map((bg) => (
-                            <div
-                              key={bg.filename}
-                              className={`group relative aspect-video overflow-hidden rounded-lg border-2 ${
-                                uploadedBgUrl === bg.url
-                                  ? "border-[var(--gold)] ring-2 ring-[var(--gold)]/30"
-                                  : "border-border"
-                              }`}
-                            >
-                              <button
-                                onClick={() => {
-                                  setUploadedBgUrl(bg.url);
-                                  setBgId("__upload__");
-                                }}
-                                className="h-full w-full"
-                                style={{
-                                  backgroundImage: `url(${bg.url})`,
-                                  backgroundSize: "cover",
-                                  backgroundPosition: "center",
-                                }}
-                                aria-label={bg.filename}
-                              />
-                              <button
-                                onClick={() => handleDeleteUpload(bg.filename)}
-                                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                                aria-label="Delete"
+                          {uploadedBgs.map((bg) => {
+                            const isVideo = bg.filename.endsWith(".mp4") || bg.filename.endsWith(".webm");
+                            return (
+                              <div
+                                key={bg.filename}
+                                className={`group relative aspect-video overflow-hidden rounded-lg border-2 ${
+                                  uploadedBgUrl === bg.url
+                                    ? "border-[var(--gold)] ring-2 ring-[var(--gold)]/30"
+                                    : "border-border"
+                                }`}
                               >
-                                <Trash2 className="h-2.5 w-2.5" />
-                              </button>
-                            </div>
-                          ))}
+                                <button
+                                  onClick={() => {
+                                    setUploadedBgUrl(bg.url);
+                                    setBgId(isVideo ? "__video_upload__" : "__upload__");
+                                  }}
+                                  className="h-full w-full relative flex items-center justify-center bg-black overflow-hidden"
+                                  aria-label={bg.filename}
+                                >
+                                  {isVideo ? (
+                                    <video src={bg.url} className="h-full w-full object-cover pointer-events-none" />
+                                  ) : (
+                                    <div
+                                      className="h-full w-full bg-cover bg-center"
+                                      style={{ backgroundImage: `url(${bg.url})` }}
+                                    />
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUpload(bg.filename)}
+                                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                  aria-label="Delete"
+                                >
+                                  <Trash2 className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1379,31 +1489,113 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   </div>
                 )}
 
-                {/* Gradient */}
-                {bgTab === "gradient" && (
+                {/* Video presets */}
+                {bgTab === "video" && (
                   <div>
-                    <p className="mb-2 text-xs font-semibold text-foreground">Gradients</p>
+                    <p className="mb-2 text-xs font-semibold text-foreground">Preset Video Loops</p>
                     <div className="grid grid-cols-3 gap-2">
-                      {GRADIENTS.map((g) => (
+                      {PRESET_VIDEOS.map((v) => (
                         <button
-                          key={g.id}
+                          key={v.id}
                           onClick={() => {
-                            setBgId(`__grad_${g.id}__`);
+                            setBgId(v.id);
                             setAiBgUrl(null);
                             setUploadedBgUrl(null);
                           }}
                           className={`group relative aspect-video overflow-hidden rounded-lg border-2 transition-all ${
-                            bgId === `__grad_${g.id}__`
+                            bgId === v.id
                               ? "border-[var(--gold)] ring-2 ring-[var(--gold)]/30"
                               : "border-border hover:border-[var(--gold)]/50"
                           }`}
-                          style={{ background: g.css }}
                         >
-                          <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                            <span className="text-[9px] font-semibold text-white">{g.name}</span>
+                          <video src={v.url} muted loop autoPlay className="h-full w-full object-cover pointer-events-none" />
+                          <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/70 to-transparent p-1.5">
+                            <span className="text-[9px] font-semibold text-white truncate max-w-full">
+                              {v.name}
+                            </span>
                           </div>
                         </button>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Gradient */}
+                {bgTab === "gradient" && (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="mb-2 text-xs font-semibold text-foreground">Presets</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {GRADIENTS.map((g) => (
+                          <button
+                            key={g.id}
+                            onClick={() => {
+                              setBgId(`__grad_${g.id}__`);
+                              setAiBgUrl(null);
+                              setUploadedBgUrl(null);
+                            }}
+                            className={`group relative aspect-video overflow-hidden rounded-lg border-2 transition-all ${
+                              bgId === `__grad_${g.id}__`
+                                ? "border-[var(--gold)] ring-2 ring-[var(--gold)]/30"
+                                : "border-border hover:border-[var(--gold)]/50"
+                            }`}
+                            style={{ background: g.css }}
+                          >
+                            <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                              <span className="text-[9px] font-semibold text-white">{g.name}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border p-3 space-y-3">
+                      <p className="text-xs font-semibold text-foreground">Custom Gradient Builder</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="mb-1 block text-[10px] text-muted-foreground">Start Color</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={customGradientStart}
+                              onChange={(e) => {
+                                setCustomGradientStart(e.target.value);
+                                setBgId("__custom_grad__");
+                              }}
+                              className="h-8 w-10 cursor-pointer rounded border border-border"
+                            />
+                            <span className="text-[10px] font-mono uppercase">{customGradientStart}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="mb-1 block text-[10px] text-muted-foreground">End Color</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={customGradientEnd}
+                              onChange={(e) => {
+                                setCustomGradientEnd(e.target.value);
+                                setBgId("__custom_grad__");
+                              }}
+                              className="h-8 w-10 cursor-pointer rounded border border-border"
+                            />
+                            <span className="text-[10px] font-mono uppercase">{customGradientEnd}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="mb-1 block text-[10px] text-muted-foreground">Angle ({customGradientAngle}°)</span>
+                        <Slider
+                          value={[customGradientAngle]}
+                          onValueChange={(v) => {
+                            setCustomGradientAngle(v[0]);
+                            setBgId("__custom_grad__");
+                          }}
+                          max={360}
+                          step={1}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1446,9 +1638,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   />
                 </div>
               </TabsContent>
-            </ScrollArea>
 
-            <ScrollArea className="flex-1 thin-scroll">
               {/* TEXT TAB */}
               <TabsContent value="text" className="p-4 mt-0 space-y-4">
                 <div>
@@ -1472,43 +1662,121 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                 </div>
 
                 <div>
-                  <Label className="mb-2 block text-xs font-medium text-muted-foreground">Text Size</Label>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <Label className="mb-2 block text-xs font-medium text-muted-foreground">Arabic Font</Label>
+                  <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { id: "sm", name: "S" },
-                      { id: "md", name: "M" },
-                      { id: "lg", name: "L" },
-                      { id: "xl", name: "XL" },
-                    ].map((t) => (
+                      { id: "quran", name: "Quran" },
+                      { id: "naskh", name: "Naskh" },
+                      { id: "amiri", name: "Amiri" },
+                    ].map((f) => (
                       <button
-                        key={t.id}
-                        onClick={() => setTextSize(t.id)}
+                        key={f.id}
+                        onClick={() => setArabicFont(f.id as any)}
                         className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-all ${
-                          textSize === t.id
+                          arabicFont === f.id
                             ? "border-[var(--gold)] bg-[var(--gold-soft)]/40 text-foreground"
                             : "border-border text-muted-foreground hover:bg-accent/40"
                         }`}
                       >
-                        {t.name}
+                        {f.name}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <Label className="mb-2 block text-xs font-medium text-muted-foreground">Text Color</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {["#ffffff", "#d4a017", "#fbbf24", "#10b981", "#60a5fa", "#f87171", "#a78bfa"].map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setTextColor(c)}
-                        className={`h-8 w-8 rounded-full border-2 transition-all ${
-                          textColor === c ? "scale-110 border-foreground" : "border-border hover:scale-105"
-                        }`}
-                        style={{ background: c }}
-                        aria-label={c}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-semibold text-foreground">Manual Font Sizes</p>
+                  <div>
+                    <Label className="mb-1 block text-[10px] text-muted-foreground">Arabic Text Size ({arabicTextSize}px)</Label>
+                    <Slider
+                      value={[arabicTextSize]}
+                      onValueChange={(v) => setArabicTextSize(v[0])}
+                      min={24}
+                      max={96}
+                      step={1}
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-[10px] text-muted-foreground">Translation Text Size ({translationTextSize}px)</Label>
+                    <Slider
+                      value={[translationTextSize]}
+                      onValueChange={(v) => setTranslationTextSize(v[0])}
+                      min={12}
+                      max={64}
+                      step={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-semibold text-foreground">Custom Text Color Pickers</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="mb-1 block text-[10px] text-muted-foreground">Text Color</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={textColor}
+                          onChange={(e) => setTextColor(e.target.value)}
+                          className="h-8 w-10 cursor-pointer rounded border border-border"
+                        />
+                        <span className="text-[10px] font-mono uppercase">{textColor}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-[10px] text-muted-foreground">Text Shadow</span>
+                      <Input
+                        value={textShadow}
+                        onChange={(e) => setTextShadow(e.target.value)}
+                        placeholder="e.g. 0 2px 8px rgba(0,0,0,0.5)"
+                        className="h-8 text-xs font-mono"
                       />
-                    ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-semibold text-foreground">Custom Overlay / Watermark Text</p>
+                  <div>
+                    <span className="mb-1 block text-[10px] text-muted-foreground">Overlay Text</span>
+                    <Input
+                      placeholder="@MyIslamicChannel"
+                      value={customOverlayText}
+                      onChange={(e) => setCustomOverlayText(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="mb-1 block text-[10px] text-muted-foreground">Text Color</span>
+                      <input
+                        type="color"
+                        value={customOverlayTextColor}
+                        onChange={(e) => setCustomOverlayTextColor(e.target.value)}
+                        className="h-8 w-full cursor-pointer rounded border border-border"
+                      />
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-[10px] text-muted-foreground">Overlay Position</span>
+                      <SimpleSelect
+                        value={customOverlayTextPosition}
+                        onValueChange={(v) => setCustomOverlayTextPosition(v as any)}
+                        options={[
+                          { value: "top", label: "Top" },
+                          { value: "bottom", label: "Bottom" }
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-[10px] text-muted-foreground">Overlay Font Size ({customOverlayTextSize}px)</Label>
+                    <Slider
+                      value={[customOverlayTextSize]}
+                      onValueChange={(v) => setCustomOverlayTextSize(v[0])}
+                      min={10}
+                      max={48}
+                      step={1}
+                    />
                   </div>
                 </div>
 
@@ -1666,30 +1934,51 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         onClose={() => setVideoDialogOpen(false)}
         slides={slides}
         surahName={currentSurah?.englishName ?? "Quran"}
-        background={{
-          type:
-            bgId === "__ai__" ? "image"
-            : bgId === "__upload__" ? "image"
-            : bgId.startsWith("__grad_") ? "gradient"
-            : bgId.startsWith("__color_") ? "color"
-            : "preset",
-          cssValue:
-            bgId.startsWith("__grad_")
-              ? GRADIENTS.find((g) => `__grad_${g.id}__` === bgId)?.css
-              : bgId.startsWith("__color_")
-              ? bgId.replace("__color_", "").replace("__", "")
-              : PRESET_BACKGROUNDS.find((b) => b.id === bgId)?.css,
-          imageUrl:
-            bgId === "__ai__" ? (aiBgUrl ?? undefined)
-            : bgId === "__upload__" ? (uploadedBgUrl ?? undefined)
-            : undefined,
-          opacity: bgOpacity,
-        }}
+        customAudioUrl={customAudioUrl}
+        background={(() => {
+          if (bgId.startsWith("v_") || bgId === "__video_upload__") {
+            return {
+              type: "video" as const,
+              videoUrl: bgId === "__video_upload__" ? uploadedBgUrl || "" : currentVideo?.url || "",
+              opacity: bgOpacity
+            };
+          }
+          if (bgId === "__custom_grad__") {
+            return {
+              type: "gradient" as const,
+              cssValue: `linear-gradient(${customGradientAngle}deg, ${customGradientStart}, ${customGradientEnd})`,
+              opacity: bgOpacity
+            };
+          }
+          if (bgId === "__ai__" && aiBgUrl) {
+            return { type: "image" as const, imageUrl: aiBgUrl, opacity: bgOpacity };
+          }
+          if (bgId === "__upload__" && uploadedBgUrl) {
+            return { type: "image" as const, imageUrl: uploadedBgUrl, opacity: bgOpacity };
+          }
+          if (bgId.startsWith("__grad_")) {
+            const gradId = bgId.replace("__grad_", "").replace("__", "");
+            const grad = GRADIENTS.find((g) => g.id === gradId);
+            return { type: "gradient" as const, cssValue: grad?.css ?? GRADIENTS[0].css, opacity: bgOpacity };
+          }
+          if (bgId.startsWith("__color_")) {
+            const color = bgId.slice("__color_".length, -2);
+            return { type: "color" as const, cssValue: color, opacity: bgOpacity };
+          }
+          const preset = PRESET_BACKGROUNDS.find((b) => b.id === bgId) ?? PRESET_BACKGROUNDS[0];
+          return { type: "preset" as const, cssValue: preset.css, opacity: bgOpacity };
+        })()}
         textColor={textColor}
         textShadow={textShadow}
-        textSize={textSizeMap[textSize] ? parseFloat(textSizeMap[textSize]) : 48}
+        textSize={arabicTextSize}
         showTranslation={showTranslation}
         aspectRatio={aspectRatio}
+        arabicFont={arabicFontFamily}
+        translationFont={translationFontFamily}
+        overlayText={customOverlayText}
+        overlayTextColor={customOverlayTextColor}
+        overlayTextSize={customOverlayTextSize}
+        overlayTextPosition={customOverlayTextPosition}
       />
     </motion.div>
   );
