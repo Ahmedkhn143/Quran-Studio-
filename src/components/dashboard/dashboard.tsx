@@ -21,6 +21,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import { SimpleSelect } from "@/components/dashboard/simple-select";
+import { VideoGenDialog } from "@/components/dashboard/video-gen-dialog";
 import { toast } from "sonner";
 import {
   RECITERS, TRANSLATIONS, type SurahListItem,
@@ -157,6 +158,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const audioFileInputRef = useRef<HTMLInputElement | null>(null);
   const [bgOpacity, setBgOpacity] = useState(100);
 
   // --- Text style ---
@@ -170,6 +172,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [overlayEffect, setOverlayEffect] = useState("none");
   const [effectIntensity, setEffectIntensity] = useState(60);
+
+  // --- Video generation dialog ---
+  const [videoDialogOpen, setVideoDialogOpen] = useState(false);
 
   // --- Left panel tab ---
   const [leftTab, setLeftTab] = useState<"content" | "ai">("content");
@@ -590,7 +595,13 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
           <Button
             size="sm"
             className="bg-gradient-to-r from-emerald-700 to-emerald-800 text-white hover:from-emerald-800 hover:to-emerald-900"
-            onClick={() => toast.success("Video generation started! Keep this tab open.")}
+            onClick={() => {
+              if (slides.length === 0) {
+                toast.error("Load slides first in the left panel");
+                return;
+              }
+              setVideoDialogOpen(true);
+            }}
           >
             <FileVideo className="mr-1.5 h-3.5 w-3.5" /> Generate Video
           </Button>
@@ -735,14 +746,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       <p className="text-[10px] text-muted-foreground">
                         Drop MP3 here or{" "}
                         <button
-                          onClick={() => fileInputRef.current?.click()}
+                          onClick={() => audioFileInputRef.current?.click()}
                           className="font-semibold text-emerald-700 dark:text-[var(--gold)] underline"
                         >
                           browse
                         </button>
                       </p>
                       <input
-                        ref={fileInputRef}
+                        ref={audioFileInputRef}
                         type="file"
                         accept="audio/mpeg,audio/mp3"
                         className="hidden"
@@ -1486,9 +1497,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   <Button
                     className="mt-3 w-full bg-gradient-to-r from-[var(--gold)] to-amber-500 text-emerald-950 hover:from-amber-400 hover:to-amber-500"
                     size="sm"
-                    onClick={() => toast.success("Browser video generation started!")}
+                    onClick={() => {
+                      if (slides.length === 0) {
+                        toast.error("Load slides first in the left panel");
+                        return;
+                      }
+                      setVideoDialogOpen(true);
+                    }}
                   >
-                    <FileVideo className="mr-2 h-3.5 w-3.5" /> Generate MP4
+                    <FileVideo className="mr-2 h-3.5 w-3.5" /> Generate Video
                   </Button>
                   <Button
                     variant="outline"
@@ -1532,6 +1549,38 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
           </Tabs>
         </aside>
       </div>
+
+      {/* Video Generation Dialog */}
+      <VideoGenDialog
+        open={videoDialogOpen}
+        onClose={() => setVideoDialogOpen(false)}
+        slides={slides}
+        surahName={currentSurah?.englishName ?? "Quran"}
+        background={{
+          type:
+            bgId === "__ai__" ? "image"
+            : bgId === "__upload__" ? "image"
+            : bgId.startsWith("__grad_") ? "gradient"
+            : bgId.startsWith("__color_") ? "color"
+            : "preset",
+          cssValue:
+            bgId.startsWith("__grad_")
+              ? GRADIENTS.find((g) => `__grad_${g.id}__` === bgId)?.css
+              : bgId.startsWith("__color_")
+              ? bgId.replace("__color_", "").replace("__", "")
+              : PRESET_BACKGROUNDS.find((b) => b.id === bgId)?.css,
+          imageUrl:
+            bgId === "__ai__" ? (aiBgUrl ?? undefined)
+            : bgId === "__upload__" ? (uploadedBgUrl ?? undefined)
+            : undefined,
+          opacity: bgOpacity,
+        }}
+        textColor={textColor}
+        textShadow={textShadow}
+        textSize={textSizeMap[textSize] ? parseFloat(textSizeMap[textSize]) : 48}
+        showTranslation={showTranslation}
+        aspectRatio={aspectRatio}
+      />
     </motion.div>
   );
 }
