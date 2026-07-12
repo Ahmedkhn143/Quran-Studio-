@@ -193,12 +193,26 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   // Effects
   // =====================
 
-  // Fetch surah list on mount
+  // Fetch surah list on mount + auto-load the first ayah
   useEffect(() => {
     fetch("/api/quran/surahs")
       .then((r) => r.json())
       .then((j) => { if (j.ok) setSurahs(j.data); })
       .catch(() => {});
+    // Auto-load Al-Faatiha ayah 1 on mount so the canvas isn't empty.
+    // Use a direct fetch (not the loadSlides callback) to avoid stale-closure issues.
+    (async () => {
+      try {
+        const res = await fetch(`/api/quran/ayah?surah=1&ayah=1&reciter=${reciter}&translation=${translation}`);
+        const json = await res.json();
+        if (json.ok && json.data) {
+          setSlides([json.data]);
+          setCurrentSlide(0);
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
   }, []);
 
   // Load uploaded backgrounds on mount
@@ -228,115 +242,160 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   // =====================
   // Slide loading
   // =====================
-  const loadSlides = useCallback(async () => {
+  const loadSlides = useCallback(async (opts?: { surah?: number; from?: number; to?: number; silent?: boolean }) => {
+    const surah = opts?.surah ?? selectedSurah;
+    const from = opts?.from ?? fromAyah;
+    const to = opts?.to ?? toAyah;
+    const silent = opts?.silent ?? false;
+
     setLoadingSlides(true);
     setIsPlaying(false);
     setActiveWordIdx(-1);
     setProgress(0);
     try {
       const promises: Promise<Response>[] = [];
-      for (let i = fromAyah; i <= toAyah; i++) {
+      for (let i = from; i <= to; i++) {
         promises.push(
-          fetch(`/api/quran/ayah?surah=${selectedSurah}&ayah=${i}&reciter=${reciter}&translation=${translation}`)
+          fetch(`/api/quran/ayah?surah=${surah}&ayah=${i}&reciter=${reciter}&translation=${translation}`)
         );
       }
       const responses = await Promise.all(promises);
       const jsons = await Promise.all(responses.map((r) => r.json()));
       const loaded: AyahData[] = jsons.filter((j) => j.ok).map((j) => j.data);
       if (loaded.length === 0) {
-        toast.error("No ayahs loaded");
+        if (!silent) toast.error("No ayahs loaded");
         return;
       }
       setSlides(loaded);
       setCurrentSlide(0);
-      toast.success(`Loaded ${loaded.length} slide${loaded.length > 1 ? "s" : ""}`);
+      if (!silent) toast.success(`Loaded ${loaded.length} slide${loaded.length > 1 ? "s" : ""}`);
     } catch (e: any) {
-      toast.error(e.message || "Failed to load slides");
+      if (!silent) toast.error(e.message || "Failed to load slides");
     } finally {
       setLoadingSlides(false);
     }
   }, [fromAyah, toAyah, selectedSurah, reciter, translation]);
 
+  // Audio playback state for time display
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+
   const currentAyah = slides[currentSlide];
 
   // =====================
-  // Audio playback (word-by-word)
+  // Audio playback — continuous full-ayah audio + word highlighting
   // =====================
-  useEffect(() => {
-    if (!isPlaying || !currentAyah?.words?.length) return;
+  // Strategy: play the FULL ayah audio (one continuous stream, no gaps between words).
+  // Highlight words by dividing the audio duration evenly across words.
+  // This gives a smooth, continuous playback instead of choppy per-word audio.
+  const playbackSessionRef = useRef<{ cancelled: boolean; currentAudio: HTMLAudioElement | null }>({
+    cancelled: false,
+    currentAudio: null,
+  });
 
-    // If we have per-word audio, play word-by-word
-    if (currentAyah.words.every((w) => w.audio)) {
-      let idx = 0;
-      setActiveWordIdx(0);
-      const playWord = () => {
-        const word = currentAyah.words[idx];
-        if (!word?.audio) {
-          idx++;
-          if (idx < currentAyah.words.length) setTimeout(playWord, 600);
-          else { setIsPlaying(false); setActiveWordIdx(-1); setProgress(100); }
-          return;
-        }
-        const a = new Audio(word.audio);
-        a.volume = volume / 100;
-        a.onended = () => {
-          idx++;
-          if (idx < currentAyah.words.length) {
-            setActiveWordIdx(idx);
-            setProgress(Math.round((idx / currentAyah.words.length) * 100));
-            setTimeout(playWord, 120);
-          } else {
-            setIsPlaying(false);
-            setActiveWordIdx(-1);
-            setProgress(100);
-            setTimeout(() => setProgress(0), 800);
-          }
-        };
-        a.onerror = () => {
-          idx++;
-          if (idx < currentAyah.words.length) {
-            setActiveWordIdx(idx);
-            setTimeout(playWord, 300);
-          } else { setIsPlaying(false); setActiveWordIdx(-1); }
-        };
-        a.play().catch(() => {
-          idx++;
-          if (idx < currentAyah.words.length) {
-            setActiveWordIdx(idx);
-            setTimeout(playWord, 300);
-          } else { setIsPlaying(false); setActiveWordIdx(-1); }
-        });
-      };
-      playWord();
-      return () => {};
+  useEffect(() => {
+    // Cancel any previous session
+    playbackSessionRef.current.cancelled = true;
+    if (playbackSessionRef.current.currentAudio) {
+      try { playbackSessionRef.current.currentAudio.pause(); } catch {}
+      playbackSessionRef.current.currentAudio = null;
+    }
+    setCurrentTime(0);
+    setAudioDuration(0);
+
+    if (!isPlaying || !currentAyah?.audio) {
+      return;
     }
 
-    // Fallback: ayah-level audio
-    if (audioRef.current) audioRef.current.pause();
-    const a = new Audio(currentAyah.audio);
-    audioRef.current = a;
-    a.volume = volume / 100;
-    const interval = setInterval(() => {
-      setActiveWordIdx((prev) => {
-        const next = prev + 1;
-        if (next >= currentAyah.words.length) { clearInterval(interval); return -1; }
-        return next;
-      });
-    }, 900);
-    a.onended = () => {
-      setIsPlaying(false); setActiveWordIdx(-1); setProgress(100);
-      clearInterval(interval);
-      setTimeout(() => setProgress(0), 600);
+    // Start a new session
+    const session = { cancelled: false, currentAudio: null as HTMLAudioElement | null };
+    playbackSessionRef.current = session;
+
+    setActiveWordIdx(0);
+    setProgress(0);
+
+    // Create a single audio element for the entire ayah
+    const audio = new Audio();
+    audio.src = currentAyah.audio;
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    audio.volume = volume / 100;
+    session.currentAudio = audio;
+
+    const totalWords = currentAyah.words.length;
+
+    // Highlight words based on audio currentTime
+    // Each word gets an equal slice of the audio duration
+    const updateHighlight = () => {
+      if (session.cancelled || !audio.duration) return;
+      const t = audio.currentTime;
+      const dur = audio.duration;
+      setCurrentTime(t);
+      setAudioDuration(dur);
+      // Map current time to word index (even slices)
+      const idx = Math.min(totalWords - 1, Math.floor((t / dur) * totalWords));
+      setActiveWordIdx(idx);
+      setProgress(Math.round((t / dur) * 100));
     };
-    a.ontimeupdate = () => {
-      if (a.duration) setProgress(Math.round((a.currentTime / a.duration) * 100));
+
+    audio.ontimeupdate = updateHighlight;
+    audio.onloadedmetadata = () => {
+      if (!session.cancelled && audio.duration) setAudioDuration(audio.duration);
     };
-    a.play().catch(() => {
-      toast.error("Autoplay blocked. Click play again.");
-      setIsPlaying(false); clearInterval(interval);
+
+    audio.onended = () => {
+      if (session.cancelled) return;
+      setActiveWordIdx(-1);
+      setProgress(100);
+      setIsPlaying(false);
+      setTimeout(() => { if (!session.cancelled) setProgress(0); }, 800);
+    };
+
+    audio.onerror = () => {
+      if (session.cancelled) return;
+      toast.error("Audio failed to load. Try another reciter.");
+      setIsPlaying(false);
+      setActiveWordIdx(-1);
+    };
+
+    // Play (may reject due to autoplay policy — handle gracefully)
+    const ready = new Promise<void>((resolve) => {
+      if (audio.readyState >= 2) {
+        resolve();
+        return;
+      }
+      audio.oncanplay = () => resolve();
+      audio.onloadeddata = () => resolve();
+      // Safety timeout
+      setTimeout(resolve, 2000);
     });
-    return () => { clearInterval(interval); a.pause(); };
+
+    ready.then(() => {
+      if (session.cancelled) return;
+      audio.play().catch((err: any) => {
+        if (err?.name === "NotAllowedError") {
+          toast.error("Browser blocked autoplay. Click Play again.");
+        } else {
+          toast.error("Couldn't play audio: " + (err?.message || "unknown error"));
+        }
+        setIsPlaying(false);
+        setActiveWordIdx(-1);
+      });
+    });
+
+    return () => {
+      session.cancelled = true;
+      try { audio.pause(); } catch {}
+    };
   }, [isPlaying, currentAyah, volume]);
+
+  // Format seconds as m:ss
+  const formatTime = (s: number) => {
+    if (!s || !isFinite(s)) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
 
   // =====================
   // File upload handler
@@ -653,6 +712,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                             setSelectedSurah(s.number);
                             setFromAyah(1);
                             setToAyah(1);
+                            // Auto-load the first ayah of this surah immediately
+                            loadSlides({ surah: s.number, from: 1, to: 1, silent: true });
                           }}
                           className={`flex w-full items-center justify-between border-b border-border px-2.5 py-2 text-left transition-colors last:border-0 ${
                             selectedSurah === s.number ? "bg-emerald-700/10" : "hover:bg-accent/40"
@@ -783,17 +844,22 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   </div>
 
                   {/* Load slides button */}
-                  <Button
-                    onClick={loadSlides}
-                    disabled={loadingSlides}
-                    className="w-full bg-gradient-to-r from-emerald-700 to-emerald-800 text-white"
-                  >
-                    {loadingSlides ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
-                    ) : (
-                      <><Plus className="mr-2 h-4 w-4" /> Load Slides</>
-                    )}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => loadSlides()}
+                      disabled={loadingSlides}
+                      className="w-full bg-gradient-to-r from-emerald-700 to-emerald-800 text-white shadow-md hover:shadow-lg"
+                    >
+                      {loadingSlides ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
+                      ) : (
+                        <><Plus className="mr-2 h-4 w-4" /> Load Slides ({fromAyah}{toAyah !== fromAyah ? `–${toAyah}` : ""})</>
+                      )}
+                    </Button>
+                    <p className="text-center text-[10px] text-muted-foreground">
+                      Tip: Click a surah above to auto-load its first ayah
+                    </p>
+                  </div>
                 </div>
               </ScrollArea>
             </TabsContent>
@@ -1031,6 +1097,44 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* Slide thumbnails navigator */}
+          {slides.length > 1 && (
+            <div className="shrink-0 border-t border-border bg-card px-4 py-2">
+              <div className="flex items-center gap-2 overflow-x-auto thin-scroll">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                  Slides:
+                </span>
+                {slides.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setCurrentSlide(i);
+                      setIsPlaying(false);
+                      setActiveWordIdx(-1);
+                      setProgress(0);
+                    }}
+                    className={`group relative flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border-2 text-[10px] font-bold transition-all ${
+                      i === currentSlide
+                        ? "border-[var(--gold)] bg-[var(--gold-soft)]/40 text-foreground"
+                        : "border-border bg-muted/40 text-muted-foreground hover:border-[var(--gold)]/50"
+                    }`}
+                    title={`Ayah ${s.numberInSurah}`}
+                  >
+                    <span className="absolute left-1 top-0.5 text-[8px] font-bold opacity-60">
+                      {s.numberInSurah}
+                    </span>
+                    <span className="mt-1 truncate px-1 font-quran text-xs" style={{ fontFamily: "var(--font-quran)" }}>
+                      {s.words[0]?.text?.substring(0, 8) || "—"}
+                    </span>
+                    {i === currentSlide && (
+                      <span className="absolute right-1 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Player controls */}
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card px-4 py-3">
             <div className="flex items-center gap-1">
@@ -1053,12 +1157,18 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Time display */}
+              <div className="hidden items-center gap-1.5 text-xs font-medium tabular-nums text-muted-foreground sm:flex">
+                <span className="text-foreground">{formatTime(currentTime)}</span>
+                <span className="text-muted-foreground/60">/</span>
+                <span>{formatTime(audioDuration)}</span>
+              </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Volume2 className="h-3.5 w-3.5" />
                 <Slider value={[volume]} onValueChange={(v) => setVolume(v[0])} max={100} step={1} className="w-20" />
                 <span className="w-8 text-right tabular-nums">{volume}%</span>
               </div>
-              <Badge variant="outline" className="hidden text-[10px] sm:inline-flex">
+              <Badge variant="outline" className="hidden text-[10px] lg:inline-flex">
                 {activeWordIdx >= 0
                   ? `Word ${activeWordIdx + 1}/${currentAyah?.words.length ?? 0}`
                   : `${progress}%`}

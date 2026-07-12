@@ -27,13 +27,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Tabs,
   TabsContent,
   TabsList,
@@ -43,6 +36,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SimpleSelect } from "@/components/dashboard/simple-select";
 import { toast } from "sonner";
 import { RECITERS, TRANSLATIONS, type SurahListItem } from "@/lib/quran-api";
 
@@ -107,7 +101,7 @@ const TEXT_SIZES = [
   { id: "xl", name: "X-Large", value: "3.75rem" },
 ] as const;
 
-export function QuranEditor() {
+export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void }) {
   const [surahs, setSurahs] = useState<SurahListItem[]>([]);
   const [surahQuery, setSurahQuery] = useState("");
   const [selectedSurah, setSelectedSurah] = useState(1);
@@ -182,107 +176,87 @@ export function QuranEditor() {
     loadAyah();
   }, [loadAyah]);
 
-  // --- Auto-play through words ---
+  // --- Continuous full-ayah audio playback with word highlighting ---
+  const landingPlaybackRef = useRef<{ cancelled: boolean; audio: HTMLAudioElement | null }>({
+    cancelled: false,
+    audio: null,
+  });
+
   useEffect(() => {
-    if (!isPlaying || !ayahData?.words?.length) return;
-
-    // If we have per-word audio, play word-by-word.
-    // Otherwise fall back to ayah audio with timed rotation.
-    if (ayahData.words.every((w) => w.audio)) {
-      let idx = 0;
-      setActiveWordIdx(0);
-      const playWord = () => {
-        const word = ayahData.words[idx];
-        if (!word?.audio) {
-          idx++;
-          if (idx < ayahData.words.length) {
-            setTimeout(playWord, 600);
-          } else {
-            setIsPlaying(false);
-            setActiveWordIdx(-1);
-            setProgress(100);
-          }
-          return;
-        }
-        const a = new Audio(word.audio);
-        a.volume = volume / 100;
-        a.onended = () => {
-          idx++;
-          if (idx < ayahData.words.length) {
-            setActiveWordIdx(idx);
-            setProgress(Math.round((idx / ayahData.words.length) * 100));
-            setTimeout(playWord, 120);
-          } else {
-            setIsPlaying(false);
-            setActiveWordIdx(-1);
-            setProgress(100);
-            setTimeout(() => setProgress(0), 800);
-          }
-        };
-        a.onerror = () => {
-          // Skip to next on error
-          idx++;
-          if (idx < ayahData.words.length) {
-            setActiveWordIdx(idx);
-            setTimeout(playWord, 300);
-          } else {
-            setIsPlaying(false);
-            setActiveWordIdx(-1);
-          }
-        };
-        a.play().catch(() => {
-          idx++;
-          if (idx < ayahData.words.length) {
-            setActiveWordIdx(idx);
-            setTimeout(playWord, 300);
-          } else {
-            setIsPlaying(false);
-            setActiveWordIdx(-1);
-          }
-        });
-      };
-      playWord();
-      return () => {};
+    // Cancel any previous session
+    landingPlaybackRef.current.cancelled = true;
+    if (landingPlaybackRef.current.audio) {
+      try { landingPlaybackRef.current.audio.pause(); } catch {}
+      landingPlaybackRef.current.audio = null;
     }
 
-    // Fallback: ayah-level audio with timed word rotation
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    const a = new Audio(ayahData.audio);
-    audioRef.current = a;
-    a.volume = volume / 100;
-    const duration = ayahData.words.length * 900; // estimate
-    const interval = setInterval(() => {
-      setActiveWordIdx((prev) => {
-        const next = prev + 1;
-        if (next >= ayahData.words.length) {
-          clearInterval(interval);
-          return -1;
-        }
-        return next;
-      });
-    }, duration / ayahData.words.length);
-    a.onended = () => {
-      setIsPlaying(false);
+    if (!isPlaying || !ayahData?.audio) return;
+
+    const session = { cancelled: false, audio: null as HTMLAudioElement | null };
+    landingPlaybackRef.current = session;
+
+    setActiveWordIdx(0);
+    setProgress(0);
+
+    const audio = new Audio();
+    audio.src = ayahData.audio;
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    audio.volume = volume / 100;
+    session.audio = audio;
+
+    const totalWords = ayahData.words.length;
+
+    const updateHighlight = () => {
+      if (session.cancelled || !audio.duration) return;
+      const t = audio.currentTime;
+      const dur = audio.duration;
+      const idx = Math.min(totalWords - 1, Math.floor((t / dur) * totalWords));
+      setActiveWordIdx(idx);
+      setProgress(Math.round((t / dur) * 100));
+    };
+
+    audio.ontimeupdate = updateHighlight;
+    audio.onended = () => {
+      if (session.cancelled) return;
       setActiveWordIdx(-1);
       setProgress(100);
-      clearInterval(interval);
-      setTimeout(() => setProgress(0), 600);
-    };
-    a.ontimeupdate = () => {
-      if (a.duration) {
-        setProgress(Math.round((a.currentTime / a.duration) * 100));
-      }
-    };
-    a.play().catch(() => {
-      toast.error("Couldn't play audio. Browser may have blocked autoplay.");
       setIsPlaying(false);
-      clearInterval(interval);
+      setTimeout(() => { if (!session.cancelled) setProgress(0); }, 800);
+    };
+    audio.onerror = () => {
+      if (session.cancelled) return;
+      toast.error("Audio failed to load. Try another reciter.");
+      setIsPlaying(false);
+      setActiveWordIdx(-1);
+    };
+
+    const ready = new Promise<void>((resolve) => {
+      if (audio.readyState >= 2) {
+        resolve();
+        return;
+      }
+      audio.oncanplay = () => resolve();
+      audio.onloadeddata = () => resolve();
+      setTimeout(resolve, 2000);
     });
+
+    ready.then(() => {
+      if (session.cancelled) return;
+      audio.play().catch((err: any) => {
+        if (err?.name === "NotAllowedError") {
+          toast.error("Browser blocked autoplay. Click Play again.");
+        } else {
+          toast.error("Couldn't play audio.");
+        }
+        setIsPlaying(false);
+        setActiveWordIdx(-1);
+      });
+    });
+
     return () => {
-      clearInterval(interval);
-      a.pause();
+      session.cancelled = true;
+      try { audio.pause(); } catch {}
     };
   }, [isPlaying, ayahData, volume]);
 
@@ -421,6 +395,26 @@ export function QuranEditor() {
             and play word-by-word recitation with synced highlighting. This is a
             real, working preview of the editor.
           </motion.p>
+
+          {onOpenDashboard && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.15 }}
+              className="mt-6 flex justify-center"
+            >
+              <Button
+                onClick={onOpenDashboard}
+                size="lg"
+                className="group bg-gradient-to-r from-emerald-700 to-emerald-800 text-white shadow-lg shadow-emerald-700/20 hover:from-emerald-800 hover:to-emerald-900"
+              >
+                <Sparkles className="mr-2 h-4 w-4 transition-transform group-hover:scale-110" />
+                Open Full Editor (Dashboard)
+                <ChevronDown className="ml-2 h-4 w-4 rotate-[-90deg] transition-transform group-hover:translate-x-1" />
+              </Button>
+            </motion.div>
+          )}
         </div>
 
         {/* Editor grid */}
@@ -793,46 +787,30 @@ export function QuranEditor() {
                       <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                         Reciter
                       </Label>
-                      <Select value={reciter} onValueChange={setReciter}>
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {RECITERS.map((r) => (
-                            <SelectItem key={r.id} value={r.id} className="text-sm">
-                              <div className="flex items-center justify-between gap-3">
-                                <span>{r.englishName}</span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {r.style}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SimpleSelect
+                        value={reciter}
+                        onValueChange={setReciter}
+                        options={RECITERS.map((r) => ({
+                          value: r.id,
+                          label: r.englishName,
+                          sublabel: r.style,
+                        }))}
+                      />
                     </div>
 
                     <div>
                       <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                         Translation
                       </Label>
-                      <Select value={translation} onValueChange={setTranslation}>
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TRANSLATIONS.map((t) => (
-                            <SelectItem key={t.id} value={t.id} className="text-sm">
-                              <div className="flex items-center justify-between gap-3">
-                                <span>{t.englishName}</span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {t.language}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SimpleSelect
+                        value={translation}
+                        onValueChange={setTranslation}
+                        options={TRANSLATIONS.map((t) => ({
+                          value: t.id,
+                          label: t.englishName,
+                          sublabel: t.language,
+                        }))}
+                      />
                     </div>
 
                     <div className="space-y-2 pt-1">
