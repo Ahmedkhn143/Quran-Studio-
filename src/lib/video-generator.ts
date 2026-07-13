@@ -311,6 +311,7 @@ export function drawSlide(
   slideProgress = 0
 ) {
   const { width: w, height: h } = opts;
+  ctx.clearRect(0, 0, w, h);
 
   // Background
   if (opts.background.type === "video" && bgVideo) {

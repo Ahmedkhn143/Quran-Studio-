@@ -265,6 +265,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [surahBgOpacity, setSurahBgOpacity] = useState<number>(40);
   const [surahXOffset, setSurahXOffset] = useState<number>(0);
   const [surahYOffset, setSurahYOffset] = useState<number>(0);
+  const [customSurahName, setCustomSurahName] = useState("");
 
   // Canvas elements state
   const [elements, setElements] = useState<CanvasElement[]>([]);
@@ -499,7 +500,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     const slideData = {
       arabicWords: currentAyah.words.map((w: any) => ({ text: w.text, audio: w.audio })),
       translation: showTranslation ? currentAyah.translation : "",
-      surahName: currentSurah?.englishName || "Surah",
+      surahName: customSurahName || currentSurah?.englishName || "Surah",
       ayahNumber: currentAyah.numberInSurah,
       audio: currentAyah.audio
     };
@@ -589,7 +590,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     audioDuration, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer,
     arabicYOffset, arabicXOffset, translationYOffset, translationXOffset, showArabic, highlightType, highlightColor, highlightGradientStart,
     highlightGradientEnd, highlightGlowColor, showSurah, surahFont, surahFontSize, surahColor, surahBgOpacity,
-    surahXOffset, surahYOffset
+    surahXOffset, surahYOffset, customSurahName
   ]);
 
   // History & Undo/Redo
@@ -3275,6 +3276,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   {showSurah && (
                     <div className="space-y-2.5">
                       <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Custom Surah Title</Label>
+                        <Input
+                          className="h-7 text-xs bg-zinc-950 border-white/10"
+                          placeholder={currentSurah?.englishName ?? "Quran"}
+                          value={customSurahName}
+                          onChange={(e) => setCustomSurahName(e.target.value)}
+                        />
+                      </div>
+                      <div>
                         <Label className="mb-1 block text-[10px] text-muted-foreground">Surah Font Family</Label>
                         <SimpleSelect
                           value={surahFont}
@@ -4232,7 +4242,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         open={videoDialogOpen}
         onClose={() => setVideoDialogOpen(false)}
         slides={slides}
-        surahName={currentSurah?.englishName ?? "Quran"}
+        surahName={customSurahName || currentSurah?.englishName || "Quran"}
         customAudioUrl={customAudioUrl}
         customAudioTimestamps={customAudioTimestamps}
         background={(() => {
