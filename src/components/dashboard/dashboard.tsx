@@ -276,7 +276,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const arabicFontFamily = (() => {
     switch (arabicFont) {
       case "KFGQPC Uthmanic Script Hafs":
-        return '"Scheherazade New", "Amiri", serif';
+        return '"KFGQPC Uthmanic Script Hafs", "Scheherazade New", "Amiri", serif';
       case "Amiri Quran":
         return '"Amiri Quran", "Amiri", serif';
       case "Scheherazade":
@@ -1293,6 +1293,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const handleFileUpload = async (file: File) => {
     if (!file) return;
     setUploading(true);
+    const isVideo = file.type.startsWith("video/");
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -1300,16 +1301,21 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (json.ok) {
         setUploadedBgUrl(json.url);
-        const isVideo = file.type.startsWith("video/");
         setBgId(isVideo ? "__video_upload__" : "__upload__");
         setBgTab("upload");
         refreshUploads();
-        toast.success(isVideo ? "Video background uploaded!" : "Background uploaded!");
+        toast.success(isVideo ? "Video background uploaded to server!" : "Background uploaded to server!");
       } else {
-        toast.error(json.error || "Upload failed");
+        throw new Error(json.error || "Upload rejected by server");
       }
     } catch (e: any) {
-      toast.error(e.message || "Upload failed");
+      console.warn("Server upload failed, using local Blob URL fallback:", e);
+      const localUrl = URL.createObjectURL(file);
+      setUploadedBgUrl(localUrl);
+      setBgId(isVideo ? "__video_upload__" : "__upload__");
+      setBgTab("upload");
+      toast.success(isVideo ? "Video loaded locally in browser!" : "Background loaded locally in browser!");
+      toast.info("Note: Stored locally in browser. You can still customize and generate your video!");
     } finally {
       setUploading(false);
     }

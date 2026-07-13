@@ -32,6 +32,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'KFGQPC Uthmanic Script Hafs';
+  src: url('https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc/fonts/KFGQPC_Uthmanic_Script_HAFS_Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
