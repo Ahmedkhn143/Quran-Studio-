@@ -544,12 +544,38 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       slides: [slideData],
       background: (() => {
         if (bgId.startsWith("v_") || bgId === "__video_upload__") {
-          return { type: "video" as const, videoUrl: bgId === "__video_upload__" ? uploadedBgUrl || "" : PRESET_VIDEOS.find(v => v.id === bgId)?.url || "", opacity: bgOpacity };
+          return {
+            type: "video" as const,
+            videoUrl: bgId === "__video_upload__" ? uploadedBgUrl || "" : PRESET_VIDEOS.find(v => v.id === bgId)?.url || "",
+            opacity: bgOpacity
+          };
         }
         if (bgId === "__custom_grad__") {
-          return { type: "gradient" as const, cssValue: `linear-gradient(${customGradientAngle}deg, ${customGradientStart}, ${customGradientEnd})`, opacity: bgOpacity };
+          return {
+            type: "gradient" as const,
+            cssValue: `linear-gradient(${customGradientAngle}deg, ${customGradientStart}, ${customGradientEnd})`,
+            opacity: bgOpacity
+          };
+        }
+        if (bgId === "__ai__" && aiBgUrl) {
+          return { type: "image" as const, imageUrl: aiBgUrl, opacity: bgOpacity };
+        }
+        if (bgId === "__upload__" && uploadedBgUrl) {
+          return { type: "image" as const, imageUrl: uploadedBgUrl, opacity: bgOpacity };
+        }
+        if (bgId.startsWith("__grad_")) {
+          const gradId = bgId.replace("__grad_", "").replace("__", "");
+          const grad = GRADIENTS.find((g) => g.id === gradId);
+          return { type: "gradient" as const, cssValue: grad?.css ?? GRADIENTS[0].css, opacity: bgOpacity };
+        }
+        if (bgId.startsWith("__color_")) {
+          const color = bgId.slice("__color_".length, -2);
+          return { type: "color" as const, cssValue: color, opacity: bgOpacity };
         }
         const preset = PRESET_BACKGROUNDS.find((b) => b.id === bgId) ?? PRESET_BACKGROUNDS[0];
+        if (preset.url) {
+          return { type: "image" as const, imageUrl: preset.url, opacity: bgOpacity };
+        }
         return { type: "preset" as const, cssValue: preset.css, opacity: bgOpacity };
       })(),
       textColor,
@@ -1183,6 +1209,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       toast.error("Failed to parse saved project");
     }
   };
+
+  // Trigger redraw once all web fonts are loaded
+  useEffect(() => {
+    if (typeof document !== "undefined" && (document as any).fonts) {
+      (document as any).fonts.ready.then(() => {
+        setRedrawCount((c) => c + 1);
+      });
+    }
+  }, []);
 
   // =====================
   // Audio playback — continuous full-ayah audio + word highlighting
@@ -4440,6 +4475,18 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         translationShadowBlur={translationShadowBlur}
         translationBackgroundType={translationBackgroundType}
       />
+      
+      {/* Hidden Font Preloader to force browser to load custom web fonts */}
+      <div style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+        <span style={{ fontFamily: "'Quran karim 114'" }}>preload</span>
+        <span style={{ fontFamily: "'KFGQPC Uthmanic Script Hafs'" }}>preload</span>
+        <span style={{ fontFamily: "'Al Qalam Quran Majeed'" }}>preload</span>
+        <span style={{ fontFamily: "'PDMS Saleem Quran'" }}>preload</span>
+        <span style={{ fontFamily: "'LPMQ Isep Misbah'" }}>preload</span>
+        <span style={{ fontFamily: "'Digital Khatt V2'" }}>preload</span>
+        <span style={{ fontFamily: "'ArabQuranIslamic140-K7n4W'" }}>preload</span>
+        <span style={{ fontFamily: "'ArabQuranIslamic140-vnmnZ'" }}>preload</span>
+      </div>
     </motion.div>
   );
 }
