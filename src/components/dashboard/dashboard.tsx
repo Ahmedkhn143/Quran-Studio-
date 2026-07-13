@@ -85,6 +85,18 @@ const PRESET_BACKGROUNDS = [
     id: "golden", name: "Golden Hour",
     css: "linear-gradient(180deg, #2d1810 0%, #6b3d1a 30%, #b8862e 60%, #f4c542 100%)",
   },
+  // Unsplash Image backgrounds
+  { id: "img_forest", name: "Misty Forest", url: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=1280&q=80" },
+  { id: "img_stars", name: "Starry Sky Photo", url: "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=1280&q=80" },
+  { id: "img_space", name: "Deep Space Nebula", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1280&q=80" },
+  { id: "img_dunes", name: "Golden Dunes", url: "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=1280&q=80" },
+  { id: "img_dark_mountains", name: "Dark Mountains", url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1280&q=80" },
+  { id: "img_ocean_photo", name: "Calm Sea Photo", url: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1280&q=80" },
+  { id: "img_aurora", name: "Emerald Aurora", url: "https://images.unsplash.com/photo-1579033461380-adb47c3eb938?w=1280&q=80" },
+  { id: "img_cosmic", name: "Cosmic Dust Photo", url: "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1280&q=80" },
+  { id: "img_nebula", name: "Purple Nebula Photo", url: "https://images.unsplash.com/photo-1502134249126-9f3755a50d78?w=1280&q=80" },
+  { id: "img_lake", name: "Silent Wilderness Lake", url: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1280&q=80" },
+  { id: "img_clouds", name: "Ethereal Clouds", url: "https://images.unsplash.com/photo-1499346030926-9a72daac6c63?w=1280&q=80" }
 ];
 
 const GRADIENTS = [
@@ -134,9 +146,26 @@ const TEXT_PRESETS = [
 ];
 
 const PRESET_VIDEOS = [
-  { id: "v_starry", name: "Starry Sky", url: "https://player.vimeo.com/external/371433846.sd.mp4?s=236da2f3ccee8d3d2a09c2a611956637b3f9ff69&profile_id=139&oauth2_token_id=57447761" },
-  { id: "v_particles", name: "Glow Loop", url: "https://player.vimeo.com/external/451837836.sd.mp4?s=d1d8858349285098ad8e92a2a0d922cfb940989f&profile_id=139&oauth2_token_id=57447761" },
-  { id: "v_water", name: "Dawn Water", url: "https://player.vimeo.com/external/403842180.sd.mp4?s=4e4d588523c14d5e90d8985f39f906f30d074b1e&profile_id=139&oauth2_token_id=57447761" }
+  { id: "v_starry", name: "Starry Sky", url: "https://player.vimeo.com/external/371433846.sd.mp4?s=236da2f3ccee8d3d2a09c2a611956637b3f9ff69&profile_id=139" },
+  { id: "v_particles", name: "Glow Loop", url: "https://player.vimeo.com/external/451837836.sd.mp4?s=d1d8858349285098ad8e92a2a0d922cfb940989f&profile_id=139" },
+  { id: "v_water", name: "Dawn Water", url: "https://player.vimeo.com/external/403842180.sd.mp4?s=4e4d588523c14d5e90d8985f39f906f30d074b1e&profile_id=139" },
+  { id: "v_dark_particles", name: "Dark Particles", url: "https://player.vimeo.com/external/384761655.sd.mp4?s=0f968ef61a7a0b3f5c5b4e339dcdcb5a49479b47&profile_id=139" },
+  { id: "v_nebula", name: "Nebula Loop", url: "https://player.vimeo.com/external/517602120.sd.mp4?s=9fe9de643d92fb0ef3a7cf49c4f1c1f7a0b4d455&profile_id=139" },
+  { id: "v_waves", name: "Abstract Waves", url: "https://player.vimeo.com/external/435641777.sd.mp4?s=005500e56e0d3752e259b3fa47d922a969bdfcfc&profile_id=139" },
+  { id: "v_smoke", name: "Smoke Flow", url: "https://player.vimeo.com/external/538568565.sd.mp4?s=001859cbf07c6f092795f7c35d76d4957e8d64fc&profile_id=139" },
+  { id: "v_forest", name: "Forest River", url: "https://player.vimeo.com/external/434045526.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
+  { id: "v_rain", name: "Rain On Window", url: "https://player.vimeo.com/external/369796001.sd.mp4?s=ad9fcfc05988e00d753d0e49eb72c694a974b77d&profile_id=139" },
+  { id: "v_ocean", name: "Ocean Waves", url: "https://player.vimeo.com/external/434042218.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
+  { id: "v_clouds", name: "Cloudy Sky", url: "https://player.vimeo.com/external/409221295.sd.mp4?s=e52e90f23cb8242a5a3a0c7104b2a3fa38b299c1&profile_id=139" },
+  { id: "v_bokeh", name: "Soft Bokeh", url: "https://player.vimeo.com/external/355159024.sd.mp4?s=ad9fcfc05988e00d753d0e49eb72c694a974b77d&profile_id=139" },
+  { id: "v_fluid", name: "Abstract Fluid", url: "https://player.vimeo.com/external/485984606.sd.mp4?s=0f968ef61a7a0b3f5c5b4e339dcdcb5a49479b47&profile_id=139" },
+  { id: "v_trails", name: "Star Trails", url: "https://player.vimeo.com/external/370395726.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
+  { id: "v_cyber", name: "Cyberpunk Grid", url: "https://player.vimeo.com/external/507490089.sd.mp4?s=005500e56e0d3752e259b3fa47d922a969bdfcfc&profile_id=139" },
+  { id: "v_ink", name: "Ink In Water", url: "https://player.vimeo.com/external/467888741.sd.mp4?s=d1d8858349285098ad8e92a2a0d922cfb940989f&profile_id=139" },
+  { id: "v_gold", name: "Golden Dust Loop", url: "https://player.vimeo.com/external/554867160.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
+  { id: "v_desert", name: "Desert Timelapse", url: "https://player.vimeo.com/external/434043949.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
+  { id: "v_sunrise", name: "Mountain Sunrise", url: "https://player.vimeo.com/external/415951662.sd.mp4?s=ad9fcfc05988e00d753d0e49eb72c694a974b77d&profile_id=139" },
+  { id: "v_snow", name: "Snow Falling", url: "https://player.vimeo.com/external/384762391.sd.mp4?s=0f968ef61a7a0b3f5c5b4e339dcdcb5a49479b47&profile_id=139" }
 ];
 
 export function Dashboard({ onClose }: { onClose: () => void }) {
@@ -477,7 +506,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     
     // Background Image
     let bgImage: HTMLImageElement | null = null;
-    const bgUrl = bgId === "__ai__" && aiBgUrl ? aiBgUrl : bgId === "__upload__" && uploadedBgUrl ? uploadedBgUrl : null;
+    const currentBgPreset = PRESET_BACKGROUNDS.find((b) => b.id === bgId);
+    const bgUrl = bgId === "__ai__" && aiBgUrl 
+      ? aiBgUrl 
+      : bgId === "__upload__" && uploadedBgUrl 
+      ? uploadedBgUrl 
+      : currentBgPreset?.url 
+      ? currentBgPreset.url 
+      : null;
     if (bgUrl) {
       const imgId = `preload_bg_${bgId}`;
       bgImage = (window as any)[imgId];
@@ -1468,6 +1504,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         const grad = GRADIENTS.find((g) => g.id === gradId);
         return { backgroundImage: grad?.css ?? GRADIENTS[0].css };
       })()
+    : currentBg?.url
+    ? { backgroundImage: `url(${currentBg.url})`, backgroundSize: "cover", backgroundPosition: "center" }
     : { background: currentBg?.css ?? PRESET_BACKGROUNDS[0].css };
 
   const textSizeMap: Record<string, string> = { sm: "1.5rem", md: "2.25rem", lg: "3rem", xl: "3.75rem" };
@@ -4228,6 +4266,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
             return { type: "color" as const, cssValue: color, opacity: bgOpacity };
           }
           const preset = PRESET_BACKGROUNDS.find((b) => b.id === bgId) ?? PRESET_BACKGROUNDS[0];
+          if (preset.url) {
+            return { type: "image" as const, imageUrl: preset.url, opacity: bgOpacity };
+          }
           return { type: "preset" as const, cssValue: preset.css, opacity: bgOpacity };
         })()}
         textColor={textColor}
