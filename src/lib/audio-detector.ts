@@ -31,6 +31,24 @@ export async function decodeAudioFile(file: File): Promise<DecodedAudioData> {
 }
 
 /**
+ * Detects starting silence offset in seconds from an AudioBuffer.
+ */
+export function detectSilenceStart(audioBuffer: AudioBuffer, threshold = 0.015): number {
+  const data = audioBuffer.getChannelData(0);
+  const sampleRate = audioBuffer.sampleRate;
+  for (let i = 0; i < data.length; i++) {
+    if (Math.abs(data[i]) > threshold) {
+      // Find sample index, convert to seconds
+      const sec = i / sampleRate;
+      // Subtract a small buffer (0.15s) so the audio doesn't cut in too abruptly
+      return Math.max(0, parseFloat((sec - 0.15).toFixed(2)));
+    }
+  }
+  return 0;
+}
+
+
+/**
  * Extracts amplitude peaks from an AudioBuffer channel.
  */
 function extractPeaks(buffer: AudioBuffer, length: number): number[] {

@@ -30,7 +30,7 @@ import {
 import { drawSlide, type CanvasElement } from "@/lib/video-generator";
 import { SURAHS_DB } from "@/lib/surahs-db";
 import { autoRemoveBackground, eraseAt } from "@/lib/bg-remover";
-import { decodeAudioFile, detectSurahFromAudio, drawWaveform } from "@/lib/audio-detector";
+import { decodeAudioFile, detectSurahFromAudio, drawWaveform, detectSilenceStart } from "@/lib/audio-detector";
 
 interface AyahData {
   numberInSurah: number;
@@ -188,6 +188,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const dialogWaveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [dialogPlayhead, setDialogPlayhead] = useState(0);
   const [dialogIsPlaying, setDialogIsPlaying] = useState(false);
+  const [audioTrimStart, setAudioTrimStart] = useState<number>(0);
+  const [audioTrimEnd, setAudioTrimEnd] = useState<number>(0);
+
 
 
   // Custom gradient state
@@ -690,6 +693,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       setPeaks(decoded.peaks);
       setAudioDuration(decoded.duration);
       
+      // Auto-detect starting silence
+      const silenceOffset = detectSilenceStart(decoded.audioBuffer);
+      setAudioTrimStart(silenceOffset);
+      setAudioTrimEnd(decoded.duration);
+      if (silenceOffset > 0) {
+        toast.success(`Auto-trimmed silence: first ${silenceOffset}s skipped`);
+      }
+      
       const localUrl = URL.createObjectURL(file);
       setCustomAudioUrl(localUrl);
       setCustomAudioName(file.name);
@@ -806,12 +817,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     }
     const count = slides.length;
     if (count === 0) return;
-    const segment = audioDuration / count;
+    const start = audioTrimStart;
+    const end = audioTrimEnd || audioDuration;
+    const segment = (end - start) / count;
     const newTimestamps: Record<number, { start: number; end: number }> = {};
     for (let i = 0; i < count; i++) {
       newTimestamps[i] = {
-        start: parseFloat((i * segment).toFixed(2)),
-        end: parseFloat(((i + 1) * segment).toFixed(2)),
+        start: parseFloat((start + i * segment).toFixed(2)),
+        end: parseFloat((start + (i + 1) * segment).toFixed(2)),
       };
     }
     setCustomAudioTimestamps(newTimestamps);
@@ -830,19 +843,21 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (customAudioUrl && audioDuration && slides.length > 0) {
       if (Object.keys(customAudioTimestamps).length === 0) {
-        const segment = audioDuration / slides.length;
+        const start = audioTrimStart;
+        const end = audioTrimEnd || audioDuration;
+        const segment = (end - start) / slides.length;
         const newTimestamps: Record<number, { start: number; end: number }> = {};
         for (let i = 0; i < slides.length; i++) {
           newTimestamps[i] = {
-            start: parseFloat((i * segment).toFixed(2)),
-            end: parseFloat(((i + 1) * segment).toFixed(2)),
+            start: parseFloat((start + i * segment).toFixed(2)),
+            end: parseFloat((start + (i + 1) * segment).toFixed(2)),
           };
         }
         setCustomAudioTimestamps(newTimestamps);
         toast.info("Auto-distributed audio timings across slides");
       }
     }
-  }, [customAudioUrl, audioDuration, slides.length]);
+  }, [customAudioUrl, audioDuration, slides.length, audioTrimStart, audioTrimEnd]);
 
 
   // Visual Audio Editor Scrubber & Timeline Render
@@ -937,6 +952,24 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     dialogAudioRef.current.currentTime = targetTime;
     setDialogPlayhead(targetTime);
   };
+
+  const runAutoSilenceTrim = () => {
+    if (!audioDuration || peaks.length === 0) {
+      toast.error("Audio waveform not available");
+      return;
+    }
+    const threshold = 0.03;
+    const index = peaks.findIndex(p => p > threshold);
+    if (index === -1) {
+      toast.success("No silence detected at start");
+      setAudioTrimStart(0);
+      return;
+    }
+    const offset = parseFloat(((index / peaks.length) * audioDuration).toFixed(2));
+    setAudioTrimStart(offset);
+    toast.success(`Auto-trimmed start silence: first ${offset}s skipped`);
+  };
+
 
   const captureStart = (idx: number) => {
     if (!dialogAudioRef.current) return;
@@ -3272,23 +3305,101 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
             {/* Split Panel Layout for Ayahs */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-zinc-950">
-              {/* Left Column: Sync Instructions & Spacebar Trigger */}
-              <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/10 p-5 bg-zinc-900/10 space-y-4 shrink-0 flex flex-col justify-between">
+              {/* Left Column: Audio Trimmer & Instructions */}
+              <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/10 p-5 bg-zinc-900/10 space-y-5 shrink-0 flex flex-col justify-between overflow-y-auto thin-scroll">
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 space-y-2">
-                    <h4 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                      <Zap className="h-3.5 w-3.5" /> Quick Sync Tip
-                    </h4>
-                    <p className="text-[10px] text-zinc-300 leading-relaxed">
-                      Play the audio and click <strong className="text-white">"Set Start"</strong> and <strong className="text-white">"Set End"</strong> next to each slide in real-time. Shaded regions on the waveform show timestamps visually.
+                  {/* Silence Detection */}
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold tracking-wider text-emerald-400">Auto-Cut Silence</Label>
+                    <Button
+                      onClick={runAutoSilenceTrim}
+                      className="w-full h-8 text-xs bg-emerald-600/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/20"
+                    >
+                      <Zap className="mr-1.5 h-3.5 w-3.5" /> Auto-Trim Start Silence
+                    </Button>
+                    <p className="text-[9px] text-zinc-400 leading-normal">
+                      Automatically detects and trims silent periods at the beginning of your recording.
+                    </p>
+                  </div>
+
+                  <div className="border-t border-white/5 pt-3 space-y-3">
+                    <Label className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Manual Audio Trim</Label>
+                    
+                    {/* Manual Trim Start */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] text-zinc-400">Trim Start (seconds)</span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 border-white/10 text-zinc-400 hover:text-white"
+                          onClick={() => setAudioTrimStart(s => Math.max(0, parseFloat((s - 0.5).toFixed(2))))}
+                        >
+                          -
+                        </Button>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max={audioTrimEnd || audioDuration || 999}
+                          value={audioTrimStart}
+                          onChange={(e) => setAudioTrimStart(parseFloat(e.target.value) || 0)}
+                          className="h-7 text-xs text-center font-mono bg-zinc-950 border-white/10 text-white"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 border-white/10 text-zinc-400 hover:text-white"
+                          onClick={() => setAudioTrimStart(s => Math.min(audioTrimEnd || audioDuration, parseFloat((s + 0.5).toFixed(2))))}
+                        >
+                          +
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Manual Trim End */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] text-zinc-400">Trim End (seconds)</span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 border-white/10 text-zinc-400 hover:text-white"
+                          onClick={() => setAudioTrimEnd(s => Math.max(audioTrimStart, parseFloat((s - 0.5).toFixed(2))))}
+                        >
+                          -
+                        </Button>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={audioTrimStart}
+                          max={audioDuration || 999}
+                          value={audioTrimEnd || audioDuration || 0}
+                          onChange={(e) => setAudioTrimEnd(parseFloat(e.target.value) || 0)}
+                          className="h-7 text-xs text-center font-mono bg-zinc-950 border-white/10 text-white"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 border-white/10 text-zinc-400 hover:text-white"
+                          onClick={() => setAudioTrimEnd(s => Math.min(audioDuration, parseFloat((s + 0.5).toFixed(2))))}
+                        >
+                          +
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1.5">
+                    <h5 className="text-[10px] font-bold text-white">Manual Sync Info</h5>
+                    <p className="text-[9px] text-zinc-400 leading-relaxed">
+                      Use "Capture Playhead" next to any verse during playback to pin its start/end times.
                     </p>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-white/5 space-y-2">
-                  <div className="text-[10px] text-zinc-500 text-center font-mono">
-                    Quran Studio Audio Calibrator v1.2
-                  </div>
+                <div className="pt-3 border-t border-white/5 text-[9px] text-zinc-500 text-center font-mono">
+                  Quran Studio Trim Toolkit
                 </div>
               </div>
 
