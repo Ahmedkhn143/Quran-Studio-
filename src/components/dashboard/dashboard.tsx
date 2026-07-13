@@ -1937,10 +1937,16 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Canvas area */}
-          <div className="flex flex-1 items-center justify-center overflow-auto p-6">
+          <div className="flex flex-1 items-center justify-center p-4 min-h-0 w-full overflow-hidden bg-muted/10">
             <div
-              className={`relative w-full max-w-3xl overflow-hidden rounded-xl shadow-2xl ${aspectClass}`}
-              style={{ position: "relative" }}
+              className={`relative max-w-full max-h-full rounded-xl shadow-2xl overflow-hidden ${aspectClass}`}
+              style={{
+                position: "relative",
+                width: aspectRatio === "16:9" ? "100%" : "auto",
+                height: aspectRatio === "16:9" ? "auto" : "100%",
+                maxWidth: aspectRatio === "16:9" ? "768px" : "100%",
+                maxHeight: "100%"
+              }}
               onMouseDown={(e) => {
                 if (e.target === e.currentTarget) {
                   setSelectedElementId(null);
