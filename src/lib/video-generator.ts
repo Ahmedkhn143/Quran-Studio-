@@ -628,8 +628,8 @@ export interface GenResult {
 /**
  * Generate a Quran video by:
  * 1. Setting up a canvas at the target resolution
- * 2. Playing per-word audio sequentially
- * 3. Rendering each frame to canvas with active word highlighted
+ * 2. Running a CONTINUOUS rendering loop that repaints the canvas every frame
+ * 3. Playing per-word audio sequentially, updating shared render state
  * 4. Capturing canvas stream via MediaRecorder
  * 5. Mixing in audio via Web Audio API
  * 6. Returning a downloadable Blob
@@ -686,30 +686,35 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
     }
   }
 
+  // ─── Shared mutable render state ───────────────────────────────────────────
+  // This state is read by the continuous render loop and written by the audio
+  // playback code. This decouples frame painting from audio timing.
+  const renderState = {
+    currentSlideIdx: 0,
+    activeWordIdx: -1,
+    currentTimeMs: 0,
+    slideProgress: 0,
+    isRunning: true,
+  };
+
   // Initial frame
-  drawSlide(ctx, opts.slides[0], opts, -1, bgImage, bgVideo);
+  drawSlide(ctx, opts.slides[0], opts, -1, bgImage, bgVideo, 0);
 
   // ─── Audio pipeline ────────────────────────────────────────────────────────
-  // IMPORTANT: The audio destination track MUST be added to the MediaStream
-  // BEFORE the MediaRecorder is created, otherwise the recorder won't capture
-  // any audio. We set this up first, then build the MediaRecorder.
   let audioCtx: AudioContext | null = null;
   let audioDest: MediaStreamAudioDestinationNode | null = null;
   let masterGain: GainNode | null = null;
 
   try {
     audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    // Browsers require the AudioContext to be "running" before decoding
     if (audioCtx.state === "suspended") {
       await audioCtx.resume();
     }
     audioDest = audioCtx.createMediaStreamDestination();
-    // Master gain node — allows future volume control
     masterGain = audioCtx.createGain();
     masterGain.gain.value = 1.0;
     masterGain.connect(audioDest);
   } catch {
-    // Proceed without audio — silent video
     audioCtx = null;
     audioDest = null;
     masterGain = null;
@@ -717,7 +722,8 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
 
   // ─── Canvas stream ──────────────────────────────────────────────────────────
   // @ts-ignore - captureStream exists on HTMLCanvasElement in modern browsers
-  const canvasStream: MediaStream = canvas.captureStream(fps);
+  const canvasStream: MediaStream = canvas.captureStream(0);
+  // Using captureStream(0) = manual frame request mode for more reliable capture
 
   // Build the combined stream — add audio track BEFORE creating MediaRecorder
   const combinedStream = new MediaStream();
@@ -726,15 +732,32 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
     audioDest.stream.getAudioTracks().forEach((t) => combinedStream.addTrack(t));
   }
 
+  // ─── Bitrate calculation ───────────────────────────────────────────────────
+  // Scale bitrate based on resolution for proper quality at all sizes
+  const pixelCount = width * height;
+  let videoBitsPerSecond: number;
+  if (pixelCount <= 854 * 480) {
+    videoBitsPerSecond = 2_500_000;       // 480p: 2.5 Mbps
+  } else if (pixelCount <= 1280 * 720) {
+    videoBitsPerSecond = 5_000_000;       // 720p: 5 Mbps
+  } else if (pixelCount <= 1920 * 1080) {
+    videoBitsPerSecond = 10_000_000;      // 1080p: 10 Mbps
+  } else if (pixelCount <= 2560 * 1440) {
+    videoBitsPerSecond = 20_000_000;      // 2K: 20 Mbps
+  } else if (pixelCount <= 3840 * 2160) {
+    videoBitsPerSecond = 40_000_000;      // 4K: 40 Mbps
+  } else {
+    videoBitsPerSecond = 80_000_000;      // 8K: 80 Mbps
+  }
+
   // ─── MediaRecorder ─────────────────────────────────────────────────────────
-  const recorderOptions: MediaRecorderOptions = { mimeType };
-  try {
-    // Only add bitrate hints if supported (some browsers reject unknown options)
-    recorderOptions.videoBitsPerSecond = Math.min(8_000_000, width * height * fps * 0.15);
-    if (audioDest) {
-      recorderOptions.audioBitsPerSecond = 128_000;
-    }
-  } catch { /* ignore */ }
+  const recorderOptions: MediaRecorderOptions = {
+    mimeType,
+    videoBitsPerSecond,
+  };
+  if (audioDest) {
+    recorderOptions.audioBitsPerSecond = 192_000;
+  }
 
   const recorder = new MediaRecorder(combinedStream, recorderOptions);
 
@@ -742,6 +765,33 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
+
+  // ─── Continuous frame rendering loop ───────────────────────────────────────
+  // This is the KEY fix: we continuously repaint the canvas at the target FPS
+  // so MediaRecorder always has fresh frames to capture. Without this, the
+  // canvas goes stale during audio playback waits and the video is blank.
+  const frameIntervalMs = Math.round(1000 / fps);
+  const frameLoop = setInterval(() => {
+    if (!renderState.isRunning) return;
+    const slide = opts.slides[renderState.currentSlideIdx];
+    if (!slide) return;
+    drawSlide(
+      ctx,
+      slide,
+      opts,
+      renderState.activeWordIdx,
+      bgImage,
+      bgVideo,
+      renderState.slideProgress
+    );
+    // Request a frame capture from the stream (manual mode with captureStream(0))
+    try {
+      const videoTrack = canvasStream.getVideoTracks()[0];
+      if (videoTrack && 'requestFrame' in videoTrack) {
+        (videoTrack as any).requestFrame();
+      }
+    } catch { /* some browsers don't support requestFrame */ }
+  }, frameIntervalMs);
 
   return new Promise<GenResult>(async (resolve, reject) => {
     let startTime = Date.now();
@@ -766,18 +816,21 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
       }
     };
 
-    recorder.onerror = (e: any) => reject(e?.error || new Error("Recorder error"));
+    recorder.onerror = (e: any) => {
+      clearInterval(frameLoop);
+      renderState.isRunning = false;
+      reject(e?.error || new Error("Recorder error"));
+    };
 
     try {
       startTime = Date.now();
-      recorder.start(1000);
+      recorder.start(500); // Smaller timeslice for more frequent data chunks
       onProgress?.(0, "Starting...");
 
       let totalDurationMs = 0;
       // Pre-calculate total duration
       for (const slide of opts.slides) {
         if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
-          // We'll measure during playback; estimate 800ms per word for now
           totalDurationMs += slide.arabicWords.length * 900;
         } else if (slide.audio) {
           totalDurationMs += 5000;
@@ -786,110 +839,111 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
         }
       }
 
-      let currentSlideIdx = 0;
       let elapsedMs = 0;
 
-      const renderFrame = async (activeWordIdx: number, currentTimeMs: number) => {
-        if (bgVideo) {
-          bgVideo.currentTime = (currentTimeMs / 1000) % (bgVideo.duration || 1);
-          await new Promise<void>((resolve) => {
-            const onSeeked = () => {
-              bgVideo!.removeEventListener("seeked", onSeeked);
-              resolve();
-            };
-            bgVideo!.addEventListener("seeked", onSeeked);
-            setTimeout(resolve, 100);
-          });
-        }
-        drawSlide(ctx, opts.slides[currentSlideIdx], opts, activeWordIdx, bgImage, bgVideo);
-      };
-
       for (let s = 0; s < opts.slides.length; s++) {
-        currentSlideIdx = s;
+        // Update shared render state for this slide
+        renderState.currentSlideIdx = s;
+        renderState.activeWordIdx = -1;
+        renderState.slideProgress = 0;
+
         const slide = opts.slides[s];
-        const statusText = `Rendering slide ${s + 1}/${opts.slides.length}`;
+        const statusText = `Rendering ayah ${s + 1}/${opts.slides.length}`;
         onProgress?.(Math.round((elapsedMs / totalDurationMs) * 100), statusText);
 
-        // Render this slide
         if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
-          // Word-by-word with per-word audio
+          // ─── Word-by-word with per-word audio ─────────────────────────
           for (let i = 0; i < slide.arabicWords.length; i++) {
-            await renderFrame(i, elapsedMs);
-            // Play word audio — connect via masterGain so audio is captured
+            // Update render state — the continuous loop will pick this up
+            renderState.activeWordIdx = i;
+            renderState.slideProgress = i / Math.max(slide.arabicWords.length - 1, 1);
+
             const word = slide.arabicWords[i];
             try {
               const buf = await fetchAudioBuffer(word.audio!, audioCtx);
               if (audioCtx && masterGain && buf) {
                 const src = audioCtx.createBufferSource();
                 src.buffer = buf;
-                src.connect(masterGain); // route through gain → dest → recorder
+                src.connect(masterGain);
                 src.start();
+                // Wait for the word audio to finish + small gap
                 const dur = buf.duration * 1000;
-                await new Promise((r) => setTimeout(r, dur + 150));
-                elapsedMs += dur + 150;
+                const gap = 80; // Small gap between words for natural pacing
+                await new Promise((r) => setTimeout(r, dur + gap));
+                elapsedMs += dur + gap;
               } else {
                 await new Promise((r) => setTimeout(r, 600));
                 elapsedMs += 600;
               }
             } catch {
-              await new Promise((r) => setTimeout(r, 500));
-              elapsedMs += 500;
+              await new Promise((r) => setTimeout(r, 400));
+              elapsedMs += 400;
             }
             onProgress?.(Math.min(99, Math.round((elapsedMs / totalDurationMs) * 100)), statusText);
           }
         } else if (slide.audio) {
-          // Full ayah audio — play entire audio while animating word highlights
+          // ─── Full ayah audio — animate word highlights over duration ───
           try {
             const buf = await fetchAudioBuffer(slide.audio, audioCtx);
             if (audioCtx && masterGain && buf) {
               const src = audioCtx.createBufferSource();
               src.buffer = buf;
-              src.connect(masterGain); // route through gain → dest → recorder
+              src.connect(masterGain);
               const startSec = slide.audioStart || 0;
-              const durationSec = (slide.audioEnd && slide.audioEnd > startSec) ? (slide.audioEnd - startSec) : buf.duration;
+              const durationSec = (slide.audioEnd && slide.audioEnd > startSec)
+                ? (slide.audioEnd - startSec) : buf.duration;
               src.start(0, startSec, durationSec);
               const dur = durationSec * 1000;
               const wordCount = slide.arabicWords.length;
-              const interval = dur / Math.max(wordCount, 1);
-              const startMs = Date.now();
-              while (Date.now() - startMs < dur) {
-                const t = Date.now() - startMs;
-                const idx = Math.min(wordCount - 1, Math.floor(t / interval));
-                await renderFrame(idx, elapsedMs + t);
-                await new Promise((r) => setTimeout(r, Math.min(100, interval)));
+              const wordInterval = dur / Math.max(wordCount, 1);
+              const playStartMs = Date.now();
+
+              // Update render state in a tight loop while audio plays
+              while (Date.now() - playStartMs < dur) {
+                const t = Date.now() - playStartMs;
+                const idx = Math.min(wordCount - 1, Math.floor(t / wordInterval));
+                renderState.activeWordIdx = idx;
+                renderState.slideProgress = t / dur;
+                renderState.currentTimeMs = elapsedMs + t;
                 onProgress?.(
                   Math.min(99, Math.round(((elapsedMs + t) / totalDurationMs) * 100)),
                   statusText
                 );
+                // Yield to the render loop — don't monopolize the thread
+                await new Promise((r) => setTimeout(r, 50));
               }
               elapsedMs += dur;
             } else {
-              // No audio context — render static for the audio duration estimate
-              await renderFrame(-1, elapsedMs);
+              renderState.activeWordIdx = -1;
               await new Promise((r) => setTimeout(r, 3000));
               elapsedMs += 3000;
             }
           } catch {
-            await renderFrame(-1, elapsedMs);
+            renderState.activeWordIdx = -1;
             await new Promise((r) => setTimeout(r, 3000));
             elapsedMs += 3000;
           }
         } else {
-          // No audio — render static for 3 seconds
-          await renderFrame(-1, elapsedMs);
+          // ─── No audio — render static for 3 seconds ───────────────────
+          renderState.activeWordIdx = -1;
           await new Promise((r) => setTimeout(r, 3000));
           elapsedMs += 3000;
         }
       }
 
       onProgress?.(99, "Finalizing...");
-      // Wait for the final audio to flush through the pipeline before stopping
-      await new Promise((r) => setTimeout(r, 800));
+      // Wait for the final audio to flush through the pipeline
+      await new Promise((r) => setTimeout(r, 1000));
+      // Stop the continuous rendering loop
+      clearInterval(frameLoop);
+      renderState.isRunning = false;
       recorder.stop();
       if (audioCtx) {
         try { await audioCtx.close(); } catch {}
       }
     } catch (err) {
+      clearInterval(frameLoop);
+      renderState.isRunning = false;
       try { recorder.stop(); } catch {}
       if (audioCtx) { try { await audioCtx.close(); } catch {} }
       reject(err as Error);

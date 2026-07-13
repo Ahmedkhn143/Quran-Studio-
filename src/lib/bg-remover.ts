@@ -23,7 +23,10 @@ export function autoRemoveBackground(
 ): Promise<{ url: string; dominantColor: RGBA }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    const isCrossOrigin = typeof window !== "undefined" && imageSrc.startsWith("http") && !imageSrc.startsWith(window.location.origin);
+    if (isCrossOrigin) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => {
       const canvas = document.createElement("canvas");
       canvas.width = img.width;

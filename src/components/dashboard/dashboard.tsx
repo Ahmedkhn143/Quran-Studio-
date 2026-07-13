@@ -692,6 +692,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       const decoded = await decodeAudioFile(file);
       setPeaks(decoded.peaks);
       setAudioDuration(decoded.duration);
+      setCustomAudioTimestamps({}); // Clear previous timestamps
       
       // Auto-detect starting silence
       const silenceOffset = detectSilenceStart(decoded.audioBuffer);
@@ -842,7 +843,10 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   // Auto-distribute timestamps when custom audio and slides are loaded
   useEffect(() => {
     if (customAudioUrl && audioDuration && slides.length > 0) {
-      if (Object.keys(customAudioTimestamps).length === 0) {
+      const keys = Object.keys(customAudioTimestamps);
+      const isMismatch = keys.length !== slides.length;
+      
+      if (keys.length === 0 || isMismatch) {
         const start = audioTrimStart;
         const end = audioTrimEnd || audioDuration;
         const segment = (end - start) / slides.length;

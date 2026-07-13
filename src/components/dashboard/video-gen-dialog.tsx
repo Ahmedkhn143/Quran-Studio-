@@ -58,9 +58,12 @@ interface VideoGenDialogProps {
 }
 
 const QUALITY_PRESETS = [
-  { id: "720p", name: "720p HD", w: 1280, h: 720, fps: 30 },
-  { id: "1080p", name: "1080p Full HD", w: 1920, h: 1080, fps: 30 },
   { id: "480p", name: "480p SD", w: 854, h: 480, fps: 24 },
+  { id: "720p", name: "720p HD", w: 1280, h: 720, fps: 30 },
+  { id: "1080p", name: "1080p FHD", w: 1920, h: 1080, fps: 30 },
+  { id: "1440p", name: "2K QHD", w: 2560, h: 1440, fps: 30 },
+  { id: "2160p", name: "4K UHD", w: 3840, h: 2160, fps: 30 },
+  { id: "4320p", name: "8K UHD", w: 7680, h: 4320, fps: 30 },
 ];
 
 const ASPECT_DIMS: Record<string, (w: number, h: number) => { w: number; h: number }> = {
@@ -310,6 +313,12 @@ export function VideoGenDialog({
                         </button>
                       ))}
                     </div>
+                    {(quality === "2160p" || quality === "4320p") && (
+                      <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[10px] text-amber-700 dark:text-amber-400">
+                        <AlertCircle className="mr-1 inline h-3 w-3" />
+                        {quality === "4320p" ? "8K" : "4K"} rendering requires significant memory. Ensure your browser has enough resources and keep the tab active.
+                      </div>
+                    )}
                   </div>
 
                   {/* Format */}
