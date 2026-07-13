@@ -19,6 +19,11 @@ export interface VideoGenOptions {
   textShadow: string;
   textSize: number; // px
   showTranslation: boolean;
+  showArabic?: boolean;
+  highlightColor?: string;
+  highlightGradientStart?: string;
+  highlightGradientEnd?: string;
+  highlightGlowColor?: string;
   // Output
   width: number;
   height: number;
@@ -38,6 +43,10 @@ export interface VideoGenOptions {
   showAudioVisualizer?: boolean;
   showHighlight?: boolean;
   elements?: CanvasElement[];
+
+  // Custom text locations offsets
+  arabicYOffset?: number;
+  translationYOffset?: number;
 
   // Callbacks
   onProgress?: (percent: number, status: string) => void;
@@ -339,6 +348,7 @@ export function drawSlide(
   ctx.fillText(meta.toUpperCase(), w - metaPad - metaPad, metaPad + metaH / 2 - 2);
 
   // Arabic words — center
+  const showArabic = opts.showArabic !== false;
   const arabicFontSize = opts.textSize;
   const arabicFont = opts.arabicFont || '"Scheherazade New", "Amiri", serif';
   ctx.font = `bold ${arabicFontSize}px ${arabicFont}`;
@@ -366,47 +376,60 @@ export function drawSlide(
   if (currentLine.length > 0) lines.push(currentLine);
 
   // Calculate total height
-  const lineHeight = arabicFontSize * 1.6;
-  const totalArabicHeight = lines.length * lineHeight;
-  const arabicStartY = h / 2 - totalArabicHeight / 2;
+  const lineHeight = showArabic ? arabicFontSize * 1.6 : 0;
+  const totalArabicHeight = showArabic ? lines.length * lineHeight : 0;
+  
+  // Apply Y location offsets: (arabicYOffset is percentage of height, -100 to 100)
+  const yOffsetPx = opts.arabicYOffset ? (opts.arabicYOffset / 100) * h : 0;
+  const arabicStartY = h / 2 - totalArabicHeight / 2 + yOffsetPx;
 
-  // Draw each line
-  lines.forEach((line, lineIdx) => {
-    const lineY = arabicStartY + lineIdx * lineHeight + lineHeight / 2;
-    // Calculate total line width
-    let lineW = 0;
-    for (const item of line) {
-      lineW += ctx.measureText(item.word).width;
-    }
-    lineW += spaceW * (line.length - 1);
-    
-    // Starting X at center + half width, rendering RTL (moving leftwards)
-    let x = w / 2 + lineW / 2;
-    for (let j = 0; j < line.length; j++) {
-      const item = line[j];
-      const ww = ctx.measureText(item.word).width;
-      const isActive = item.idx === activeWordIdx;
-      const isHighlighted = isActive && (opts.showHighlight !== false);
-      
-      // Shadow
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillText(item.word, x - ww / 2 + 2, lineY + 2);
-      
-      // Word Color & Glow
-      ctx.fillStyle = isHighlighted ? "#d4a017" : opts.textColor;
-      ctx.fillText(item.word, x - ww / 2, lineY);
-      
-      if (isHighlighted) {
-        ctx.save();
-        ctx.shadowColor = "rgba(212,160,23,0.8)";
-        ctx.shadowBlur = 24;
-        ctx.fillStyle = "#d4a017";
-        ctx.fillText(item.word, x - ww / 2, lineY);
-        ctx.restore();
+  if (showArabic) {
+    // Draw each line
+    lines.forEach((line, lineIdx) => {
+      const lineY = arabicStartY + lineIdx * lineHeight + lineHeight / 2;
+      // Calculate total line width
+      let lineW = 0;
+      for (const item of line) {
+        lineW += ctx.measureText(item.word).width;
       }
-      x -= (ww + spaceW);
-    }
-  });
+      lineW += spaceW * (line.length - 1);
+      
+      // Starting X at center + half width, rendering RTL (moving leftwards)
+      let x = w / 2 + lineW / 2;
+      for (let j = 0; j < line.length; j++) {
+        const item = line[j];
+        const ww = ctx.measureText(item.word).width;
+        const isActive = item.idx === activeWordIdx;
+        const isHighlighted = isActive && (opts.showHighlight !== false);
+        
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillText(item.word, x - ww / 2 + 2, lineY + 2);
+        
+        // Word Color & Glow
+        let highlightStyle: string | CanvasGradient = opts.highlightColor || "#d4a017";
+        if (opts.highlightGradientStart && opts.highlightGradientEnd) {
+          const grad = ctx.createLinearGradient(x - ww, lineY, x, lineY);
+          grad.addColorStop(0, opts.highlightGradientStart);
+          grad.addColorStop(1, opts.highlightGradientEnd);
+          highlightStyle = grad;
+        }
+        
+        ctx.fillStyle = isHighlighted ? highlightStyle : opts.textColor;
+        ctx.fillText(item.word, x - ww / 2, lineY);
+        
+        if (isHighlighted) {
+          ctx.save();
+          ctx.shadowColor = opts.highlightGlowColor || "rgba(212,160,23,0.8)";
+          ctx.shadowBlur = 24;
+          ctx.fillStyle = highlightStyle;
+          ctx.fillText(item.word, x - ww / 2, lineY);
+          ctx.restore();
+        }
+        x -= (ww + spaceW);
+      }
+    });
+  }
 
   // Translation
   if (opts.showTranslation && slide.translation) {
@@ -415,7 +438,8 @@ export function drawSlide(
     ctx.font = `500 ${transFontSize}px ${translationFont}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const transY = arabicStartY + totalArabicHeight + h * 0.04;
+    
+    const transYOffsetPx = opts.translationYOffset ? (opts.translationYOffset / 100) * h : 0;
     // Wrap translation
     const transMaxW = w * 0.7;
     const transLines = wrapText(ctx, slide.translation, transMaxW);
@@ -424,6 +448,12 @@ export function drawSlide(
     const padY = h * 0.015;
     const lineH = transFontSize * 1.4;
     const boxH = transLines.length * lineH + padY * 2;
+    
+    let transY = arabicStartY + totalArabicHeight + h * 0.04 + transYOffsetPx;
+    if (!showArabic) {
+      transY = h / 2 - boxH / 2 + transYOffsetPx;
+    }
+
     let maxLineW = 0;
     for (const line of transLines) {
       const lw = ctx.measureText(line).width;

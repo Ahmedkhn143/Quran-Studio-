@@ -191,12 +191,22 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [showTranslation, setShowTranslation] = useState(true);
   const [arabicFont, setArabicFont] = useState<string>("Cairo");
   const [translationFont, setTranslationFont] = useState<string>("Inter");
+  const [showArabic, setShowArabic] = useState(true);
+  const [highlightType, setHighlightType] = useState<"color" | "gradient">("color");
+  const [highlightColor, setHighlightColor] = useState("#d4a017");
+  const [highlightGradientStart, setHighlightGradientStart] = useState("#ffe066");
+  const [highlightGradientEnd, setHighlightGradientEnd] = useState("#f5af19");
+  const [highlightGlowColor, setHighlightGlowColor] = useState("rgba(212,160,23,0.8)");
 
   // Watermark/Overlay Text
   const [customOverlayText, setCustomOverlayText] = useState("");
   const [customOverlayTextColor, setCustomOverlayTextColor] = useState("#ffffff");
   const [customOverlayTextSize, setCustomOverlayTextSize] = useState(20);
   const [customOverlayTextPosition, setCustomOverlayTextPosition] = useState<"top" | "bottom">("bottom");
+
+  // Location/position offsets
+  const [arabicYOffset, setArabicYOffset] = useState<number>(0);
+  const [translationYOffset, setTranslationYOffset] = useState<number>(0);
 
   // Canvas elements state
   const [elements, setElements] = useState<CanvasElement[]>([]);
@@ -256,15 +266,31 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       .then((r) => r.json())
       .then((j) => { if (j.ok) setSurahs(j.data); })
       .catch(() => {});
-    // Auto-load Al-Faatiha ayah 1 on mount so the canvas isn't empty.
-    // Use a direct fetch (not the loadSlides callback) to avoid stale-closure issues.
+    // Auto-load Al-Faatiha ayahs 1 to 7 on mount so the canvas isn't empty.
     (async () => {
       try {
-        const res = await fetch(`/api/quran/ayah?surah=1&ayah=1&reciter=${reciter}&translation=${translation}`);
-        const json = await res.json();
-        if (json.ok && json.data) {
-          setSlides([json.data]);
+        const promises: Promise<any>[] = [];
+        for (let i = 1; i <= 7; i++) {
+          promises.push(fetch(`/api/quran/ayah?surah=1&ayah=${i}&reciter=${reciter}&translation=${translation}`).then(r => r.json()));
+        }
+        const results = await Promise.all(promises);
+        let loaded = results.filter(r => r.ok).map(r => r.data);
+        if (loaded.length > 0) {
+          if (prependBismillah && selectedSurah !== 9) {
+            const bismillahSlide: AyahData = {
+              numberInSurah: 0,
+              text: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+              audio: `/api/audio?src=${encodeURIComponent(`https://cdn.islamic.network/quran/audio/128/${reciter}/1.mp3`)}`,
+              words: [{ text: "بِسْمِ" }, { text: "اللَّهِ" }, { text: "الرَّحْمَٰنِ" }, { text: "الرَّحِيمِ" }],
+              translation: "In the name of Allah, the Entirely Merciful, the Especially Merciful",
+              globalNumber: 1
+            };
+            loaded = [bismillahSlide, ...loaded];
+          }
+          setSlides(loaded);
           setCurrentSlide(0);
+          setFromAyah(1);
+          setToAyah(7);
         }
       } catch (e) {
         // ignore
@@ -327,10 +353,21 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       }
       const responses = await Promise.all(promises);
       const jsons = await Promise.all(responses.map((r) => r.json()));
-      const loaded: AyahData[] = jsons.filter((j) => j.ok).map((j) => j.data);
+      let loaded: AyahData[] = jsons.filter((j) => j.ok).map((j) => j.data);
       if (loaded.length === 0) {
         if (!silent) toast.error("No ayahs loaded");
         return;
+      }
+      if (prependBismillah && surah !== 9) {
+        const bismillahSlide: AyahData = {
+          numberInSurah: 0,
+          text: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+          audio: `/api/audio?src=${encodeURIComponent(`https://cdn.islamic.network/quran/audio/128/${reciter}/1.mp3`)}`,
+          words: [{ text: "بِسْمِ" }, { text: "اللَّهِ" }, { text: "الرَّحْمَٰنِ" }, { text: "الرَّحِيمِ" }],
+          translation: "In the name of Allah, the Entirely Merciful, the Especially Merciful",
+          globalNumber: 1
+        };
+        loaded = [bismillahSlide, ...loaded];
       }
       setSlides(loaded);
       setCurrentSlide(0);
@@ -340,14 +377,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     } finally {
       setLoadingSlides(false);
     }
-  }, [fromAyah, toAyah, selectedSurah, reciter, translation]);
+  }, [fromAyah, toAyah, selectedSurah, reciter, translation, prependBismillah]);
 
-  // Auto-reload slides when translation or reciter changes
+  // Auto-reload slides when translation, reciter, or prependBismillah changes
   useEffect(() => {
-    if (slides.length > 0) {
+    // Only trigger auto-reload if slides are already loaded to avoid mount conflicts
+    if (slides.length > 1 || (slides.length === 1 && slides[0].numberInSurah !== 0)) {
       loadSlides({ silent: true });
     }
-  }, [translation, reciter]);
+  }, [translation, reciter, prependBismillah]);
 
   // Audio playback state for time display
   const [currentTime, setCurrentTime] = useState(0);
@@ -426,7 +464,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       backgroundEffect,
       textEntranceEffect,
       transitionEffect,
-      showAudioVisualizer
+      showAudioVisualizer,
+      arabicYOffset,
+      translationYOffset,
+      showArabic,
+      highlightColor,
+      highlightGradientStart: highlightType === "gradient" ? highlightGradientStart : undefined,
+      highlightGradientEnd: highlightType === "gradient" ? highlightGradientEnd : undefined,
+      highlightGlowColor
     };
 
     const slideProgress = audioDuration ? progress / 100 : 0;
@@ -436,7 +481,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     customGradientAngle, textColor, textShadow, arabicTextSize, showTranslation, arabicFont,
     translationFont, customOverlayText, customOverlayTextColor, customOverlayTextSize,
     customOverlayTextPosition, showHighlight, elements, activeWordIdx, redrawCount, progress,
-    audioDuration, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer
+    audioDuration, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer,
+    arabicYOffset, translationYOffset, showArabic, highlightType, highlightColor, highlightGradientStart,
+    highlightGradientEnd, highlightGlowColor
   ]);
 
   // History & Undo/Redo
@@ -505,6 +552,37 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     const nextElements = [...elements, newEl];
     setElements(nextElements);
     pushHistory(nextElements);
+  };
+
+  const addImageElement = (imageUrl: string) => {
+    const newEl: CanvasElement = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: "image",
+      x: 40,
+      y: 40,
+      width: 15,
+      height: 15,
+      imageUrl,
+      opacity: 100,
+      zIndex: elements.length,
+    };
+    const nextElements = [...elements, newEl];
+    setElements(nextElements);
+    pushHistory(nextElements);
+  };
+
+  const removeElementBg = async (id: string) => {
+    const el = elements.find(e => e.id === id);
+    if (!el || !el.imageUrl) return;
+    try {
+      toast.info("Removing background from element...");
+      const res = await autoRemoveBackground(el.imageUrl, bgRemoverTolerance);
+      updateElement(id, { imageUrl: res.url });
+      toast.success("Element background removed!");
+      pushHistory();
+    } catch (e: any) {
+      toast.error("Failed to remove element background: " + e.message);
+    }
   };
 
   const duplicateElement = (id: string) => {
@@ -624,7 +702,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       backgroundEffect,
       textEntranceEffect,
       transitionEffect,
-      showAudioVisualizer
+      showAudioVisualizer,
+      arabicYOffset,
+      translationYOffset
     };
     localStorage.setItem("quran_project_save", JSON.stringify(project));
     toast.success("Project saved successfully!");
@@ -656,6 +736,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       if (p.textEntranceEffect) setTextEntranceEffect(p.textEntranceEffect);
       if (p.transitionEffect) setTransitionEffect(p.transitionEffect);
       if (p.showAudioVisualizer !== undefined) setShowAudioVisualizer(p.showAudioVisualizer);
+      if (p.arabicYOffset !== undefined) setArabicYOffset(p.arabicYOffset);
+      if (p.translationYOffset !== undefined) setTranslationYOffset(p.translationYOffset);
       toast.success("Project loaded successfully!");
     } catch {
       toast.error("Failed to parse saved project");
@@ -954,11 +1036,17 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const bgStyle: React.CSSProperties = isVideoBg
     ? {}
     : bgId === "__custom_grad__"
-    ? { background: `linear-gradient(${customGradientAngle}deg, ${customGradientStart}, ${customGradientEnd})` }
+    ? { backgroundImage: `linear-gradient(${customGradientAngle}deg, ${customGradientStart}, ${customGradientEnd})` }
     : bgId === "__ai__" && aiBgUrl
     ? { backgroundImage: `url(${aiBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
     : bgId === "__upload__" && uploadedBgUrl
     ? { backgroundImage: `url(${uploadedBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : bgId.startsWith("__grad_")
+    ? (() => {
+        const gradId = bgId.replace("__grad_", "").replace("__", "");
+        const grad = GRADIENTS.find((g) => g.id === gradId);
+        return { backgroundImage: grad?.css ?? GRADIENTS[0].css };
+      })()
     : { background: currentBg?.css ?? PRESET_BACKGROUNDS[0].css };
 
   const textSizeMap: Record<string, string> = { sm: "1.5rem", md: "2.25rem", lg: "3rem", xl: "3.75rem" };
@@ -1121,15 +1209,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                         {surahs.length === 0 ? "Loading..." : "No matches"}
                       </div>
                     ) : (
-                      filteredSurahs.slice(0, 30).map((s) => (
+                      filteredSurahs.map((s) => (
                         <button
                           key={s.number}
                           onClick={() => {
                             setSelectedSurah(s.number);
                             setFromAyah(1);
-                            setToAyah(1);
-                            // Auto-load the first ayah of this surah immediately
-                            loadSlides({ surah: s.number, from: 1, to: 1, silent: true });
+                            setToAyah(s.numberOfAyahs);
+                            // Auto-load all ayahs of this surah immediately
+                            loadSlides({ surah: s.number, from: 1, to: s.numberOfAyahs, silent: true });
                           }}
                           className={`flex w-full items-center justify-between border-b border-border px-2.5 py-2 text-left transition-colors last:border-0 ${
                             selectedSurah === s.number ? "bg-emerald-700/10" : "hover:bg-accent/40"
@@ -1387,6 +1475,83 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                 height={720}
                 className="h-full w-full object-contain bg-black"
               />
+
+              {/* Elements Interactive Overlay Layer */}
+              {/* Draggable Overlay for Arabic Verse */}
+              <div
+                className={`absolute cursor-move select-none flex items-center justify-center rounded border-2 border-dashed ${
+                  selectedElementId === "__arabic_verse_pos__"
+                    ? "border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/30"
+                    : "border-transparent hover:border-white/30"
+                }`}
+                style={{
+                  left: "10%",
+                  width: "80%",
+                  top: `${50 + (arabicYOffset || 0) - 15}%`,
+                  height: "30%",
+                  zIndex: 30,
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setSelectedElementId("__arabic_verse_pos__");
+                  const startY = e.clientY;
+                  const startOffset = arabicYOffset || 0;
+                  const handleMouseMove = (moveEvent: MouseEvent) => {
+                    const dy = ((moveEvent.clientY - startY) / canvasRef.current!.clientHeight) * 100;
+                    const newOffset = Math.max(-50, Math.min(50, Math.round(startOffset + dy)));
+                    setArabicYOffset(newOffset);
+                  };
+                  const handleMouseUp = () => {
+                    window.removeEventListener("mousemove", handleMouseMove);
+                    window.removeEventListener("mouseup", handleMouseUp);
+                  };
+                  window.addEventListener("mousemove", handleMouseMove);
+                  window.addEventListener("mouseup", handleMouseUp);
+                }}
+              >
+                {selectedElementId === "__arabic_verse_pos__" && (
+                  <span className="text-[10px] text-white bg-black/60 px-1 rounded absolute top-1 left-1">Arabic Verse Position</span>
+                )}
+              </div>
+
+              {/* Draggable Overlay for Translation */}
+              {showTranslation && currentAyah?.translation && (
+                <div
+                  className={`absolute cursor-move select-none flex items-center justify-center rounded border-2 border-dashed ${
+                    selectedElementId === "__translation_pos__"
+                      ? "border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/30"
+                      : "border-transparent hover:border-white/30"
+                  }`}
+                  style={{
+                    left: "15%",
+                    width: "70%",
+                    top: `${50 + (arabicYOffset || 0) + 15 + (translationYOffset || 0) - 8}%`,
+                    height: "16%",
+                    zIndex: 30,
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setSelectedElementId("__translation_pos__");
+                    const startY = e.clientY;
+                    const startOffset = translationYOffset || 0;
+                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                      const dy = ((moveEvent.clientY - startY) / canvasRef.current!.clientHeight) * 100;
+                      const newOffset = Math.max(-50, Math.min(50, Math.round(startOffset + dy)));
+                      setTranslationYOffset(newOffset);
+                    };
+                    const handleMouseUp = () => {
+                      window.removeEventListener("mousemove", handleMouseMove);
+                      window.removeEventListener("mouseup", handleMouseUp);
+                    };
+                    window.addEventListener("mousemove", handleMouseMove);
+                    window.addEventListener("mouseup", handleMouseUp);
+                  }}
+                >
+                  {selectedElementId === "__translation_pos__" && (
+                    <span className="text-[10px] text-white bg-black/60 px-1 rounded absolute top-1 left-1">Translation Position</span>
+                  )}
+                </div>
+              )}
 
               {/* Elements Interactive Overlay Layer */}
               {elements.map((el) => {
@@ -2064,6 +2229,22 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     <Button variant="outline" size="sm" onClick={() => addShapeElement("triangle")} className="text-[10px] h-7">
                       <Plus className="mr-1 h-3 w-3" /> Triangle
                     </Button>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const inp = document.createElement("input");
+                      inp.type = "file";
+                      inp.accept = "image/*";
+                      inp.onchange = (e: any) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const rdr = new FileReader();
+                          rdr.onload = () => addImageElement(rdr.result as string);
+                          rdr.readAsDataURL(file);
+                        }
+                      };
+                      inp.click();
+                    }} className="text-[10px] h-7">
+                      <Plus className="mr-1 h-3 w-3" /> Add Image/Logo
+                    </Button>
                   </div>
 
                   {elements.length > 0 && (
@@ -2146,6 +2327,18 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                           />
                         </div>
                       </div>
+                      {elements.find(e => e.id === selectedElementId)?.type === "image" && (
+                        <div className="pt-2 border-t border-border mt-2 space-y-2">
+                          <p className="text-[10px] font-semibold text-muted-foreground">Logo / Overlay Image Actions</p>
+                          <Button
+                            size="sm"
+                            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] h-7"
+                            onClick={() => removeElementBg(selectedElementId)}
+                          >
+                            Remove Logo Background
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2170,6 +2363,31 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       onValueChange={(v) => setTranslationTextSize(v[0])}
                       min={12}
                       max={64}
+                      step={1}
+                    />
+                  </div>
+                </div>
+
+                {/* Vertical Position offsets controls */}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-bold text-foreground">Vertical Position Offsets</p>
+                  <div>
+                    <Label className="mb-1 block text-[10px] text-muted-foreground">Arabic Y Location Offset ({arabicYOffset}%)</Label>
+                    <Slider
+                      value={[arabicYOffset]}
+                      onValueChange={(v) => setArabicYOffset(v[0])}
+                      min={-50}
+                      max={50}
+                      step={1}
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-[10px] text-muted-foreground">Translation Y Location Offset ({translationYOffset}%)</Label>
+                    <Slider
+                      value={[translationYOffset]}
+                      onValueChange={(v) => setTranslationYOffset(v[0])}
+                      min={-50}
+                      max={50}
                       step={1}
                     />
                   </div>
@@ -2203,10 +2421,167 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
 
+                {/* Direct text & translation editing options */}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-bold text-foreground">Direct Verse & Translation Editor</p>
+                  {currentAyah ? (
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground block mb-1">Edit Arabic Verse</Label>
+                        <textarea
+                          className="w-full text-xs p-1.5 border border-border rounded bg-background text-foreground"
+                          rows={2}
+                          value={currentAyah.text}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSlides(prev => prev.map((s, idx) => idx === currentSlide ? { ...s, text: val } : s));
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground block mb-1">Edit Translation</Label>
+                        <textarea
+                          className="w-full text-xs p-1.5 border border-border rounded bg-background text-foreground"
+                          rows={3}
+                          value={currentAyah.translation || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSlides(prev => prev.map((s, idx) => idx === currentSlide ? { ...s, translation: val } : s));
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">Load slides to edit verse content</p>
+                  )}
+                </div>
+
                 {/* Show Translation Toggle */}
                 <div className="flex items-center justify-between rounded-lg border border-border p-3">
                   <Label htmlFor="show-tr" className="text-xs">Show translation text</Label>
                   <Switch id="show-tr" checked={showTranslation} onCheckedChange={setShowTranslation} />
+                </div>
+
+                {/* Show Arabic Toggle */}
+                <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <Label htmlFor="show-ar" className="text-xs">Show Arabic verse</Label>
+                  <Switch id="show-ar" checked={showArabic} onCheckedChange={setShowArabic} />
+                </div>
+
+                {/* Word Highlight Aesthetics */}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-bold text-foreground">Word-by-word Highlight Style</p>
+                  
+                  {/* Highlight Type Selector */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => setHighlightType("color")}
+                      className={`rounded-md border py-1 text-[10px] font-medium transition-all ${
+                        highlightType === "color"
+                          ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                          : "border-border text-muted-foreground hover:bg-accent/30"
+                      }`}
+                    >
+                      Solid Color
+                    </button>
+                    <button
+                      onClick={() => setHighlightType("gradient")}
+                      className={`rounded-md border py-1 text-[10px] font-medium transition-all ${
+                        highlightType === "gradient"
+                          ? "border-[var(--gold)] bg-[var(--gold-soft)]/30 text-foreground"
+                          : "border-border text-muted-foreground hover:bg-accent/30"
+                      }`}
+                    >
+                      Gradient
+                    </button>
+                  </div>
+
+                  {highlightType === "color" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="mb-1 block text-[10px] text-muted-foreground">Highlight Color</span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={highlightColor}
+                            onChange={(e) => setHighlightColor(e.target.value)}
+                            className="h-8 w-10 cursor-pointer rounded border border-border"
+                          />
+                          <span className="text-[10px] font-mono uppercase">{highlightColor}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="mb-1 block text-[10px] text-muted-foreground">Glow Color</span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={highlightGlowColor}
+                            onChange={(e) => setHighlightGlowColor(e.target.value)}
+                            className="h-8 w-10 cursor-pointer rounded border border-border"
+                          />
+                          <span className="text-[10px] font-mono uppercase">{highlightGlowColor}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="mb-1 block text-[10px] text-muted-foreground">Grad Start</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={highlightGradientStart}
+                              onChange={(e) => setHighlightGradientStart(e.target.value)}
+                              className="h-8 w-10 cursor-pointer rounded border border-border"
+                            />
+                            <span className="text-[10px] font-mono uppercase">{highlightGradientStart}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="mb-1 block text-[10px] text-muted-foreground">Grad End</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={highlightGradientEnd}
+                              onChange={(e) => setHighlightGradientEnd(e.target.value)}
+                              className="h-8 w-10 cursor-pointer rounded border border-border"
+                            />
+                            <span className="text-[10px] font-mono uppercase">{highlightGradientEnd}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Preset Highlight Gradients */}
+                      <div>
+                        <span className="mb-1.5 block text-[10px] text-muted-foreground">Presets</span>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { name: "Gold", start: "#ffe066", end: "#f5af19" },
+                            { name: "Sunset", start: "#ff758c", end: "#ff7eb3" },
+                            { name: "Cyan", start: "#00f2fe", end: "#4facfe" },
+                            { name: "Emerald", start: "#00ff87", end: "#60efff" },
+                          ].map((preset) => (
+                            <button
+                              key={preset.name}
+                              onClick={() => {
+                                setHighlightGradientStart(preset.start);
+                                setHighlightGradientEnd(preset.end);
+                              }}
+                              className="rounded-md border border-border py-1 text-[9px] font-medium text-muted-foreground hover:border-[var(--gold)]/50 hover:text-foreground"
+                              style={{
+                                background: `linear-gradient(135deg, ${preset.start}, ${preset.end})`,
+                                color: "#000",
+                                textShadow: "0 0 1px #fff"
+                              }}
+                            >
+                              {preset.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </ScrollArea>
@@ -2380,17 +2755,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       <VideoGenDialog
         open={videoDialogOpen}
         onClose={() => setVideoDialogOpen(false)}
-        slides={prependBismillah && selectedSurah !== 9 ? [
-          {
-            numberInSurah: 0,
-            text: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
-            audio: "https://cdn.islamic.network/quran/audio/128/ar.alafasy/1.mp3",
-            words: [{ text: "بِسْمِ" }, { text: "اللَّهِ" }, { text: "الرَّحْمَٰنِ" }, { text: "الرَّحِيمِ" }],
-            translation: "In the name of Allah, the Entirely Merciful, the Especially Merciful",
-            globalNumber: 1
-          },
-          ...slides
-        ] : slides}
+        slides={slides}
         surahName={currentSurah?.englishName ?? "Quran"}
         customAudioUrl={customAudioUrl}
         background={(() => {
@@ -2443,6 +2808,13 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         transitionEffect={transitionEffect}
         showAudioVisualizer={showAudioVisualizer}
         showHighlight={showHighlight}
+        arabicYOffset={arabicYOffset}
+        translationYOffset={translationYOffset}
+        showArabic={showArabic}
+        highlightColor={highlightColor}
+        highlightGradientStart={highlightType === "gradient" ? highlightGradientStart : undefined}
+        highlightGradientEnd={highlightType === "gradient" ? highlightGradientEnd : undefined}
+        highlightGlowColor={highlightGlowColor}
       />
     </motion.div>
   );

@@ -47,6 +47,13 @@ interface VideoGenDialogProps {
   transitionEffect?: "none" | "crossfade" | "slide" | "wipe";
   showAudioVisualizer?: boolean;
   showHighlight?: boolean;
+  arabicYOffset?: number;
+  translationYOffset?: number;
+  showArabic?: boolean;
+  highlightColor?: string;
+  highlightGradientStart?: string;
+  highlightGradientEnd?: string;
+  highlightGlowColor?: string;
 }
 
 const QUALITY_PRESETS = [
@@ -69,7 +76,9 @@ export function VideoGenDialog({
   textColor, textShadow, textSize, showTranslation, aspectRatio, customAudioUrl,
   arabicFont, translationFont,
   overlayText, overlayTextColor, overlayTextSize, overlayTextPosition,
-  elements, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer, showHighlight
+  elements, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer, showHighlight,
+  arabicYOffset, translationYOffset,
+  showArabic, highlightColor, highlightGradientStart, highlightGradientEnd, highlightGlowColor
 }: VideoGenDialogProps) {
   const [quality, setQuality] = useState("720p");
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
@@ -169,7 +178,14 @@ export function VideoGenDialog({
         textEntranceEffect,
         transitionEffect,
         showAudioVisualizer,
-        showHighlight
+        showHighlight,
+        arabicYOffset,
+        translationYOffset,
+        showArabic,
+        highlightColor,
+        highlightGradientStart,
+        highlightGradientEnd,
+        highlightGlowColor
       });
 
       setState("done");
