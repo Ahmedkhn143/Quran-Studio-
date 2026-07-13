@@ -503,6 +503,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       textColor,
       textShadow,
       textSize: arabicTextSize,
+      translationTextSize,
       showTranslation,
       width: canvas.width,
       height: canvas.height,
@@ -542,7 +543,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     drawSlide(ctx, slideData, genOpts, activeWordIdx, bgImage, null, slideProgress);
   }, [
     slides, currentSlide, bgId, aiBgUrl, uploadedBgUrl, bgOpacity, customGradientStart, customGradientEnd,
-    customGradientAngle, textColor, textShadow, arabicTextSize, showTranslation, arabicFont,
+    customGradientAngle, textColor, textShadow, arabicTextSize, translationTextSize, showTranslation, arabicFont,
     translationFont, customOverlayText, customOverlayTextColor, customOverlayTextSize,
     customOverlayTextPosition, showHighlight, elements, activeWordIdx, redrawCount, progress,
     audioDuration, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer,
@@ -2640,6 +2641,19 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       "Quran karim 114",
                       "ArabQuranIslamic140-K7n4W",
                       "ArabQuranIslamic140-vnmnZ",
+                      "Noto Sans Arabic",
+                      "Mirza",
+                      "Marhey",
+                      "Vibes",
+                      "Baloo Bhaijaan 2",
+                      "Blaka",
+                      "Blaka Ink",
+                      "Gulzar",
+                      "Aref Ruqaa Ink",
+                      "Reem Kufi Ink",
+                      "Reem Kufi Funky",
+                      "Noto Kufi Arabic",
+                      "Noto Naskh Arabic",
                       "KFGQPC Uthmanic Script Hafs",
                       "Amiri Quran",
                       "Scheherazade",
@@ -2666,7 +2680,28 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       "Kufam",
                       "Lalezar",
                       "Mada",
-                      "Markazi Text"
+                      "Markazi Text",
+                      "Andalus",
+                      "Aldhabi",
+                      "Simplified Arabic",
+                      "Traditional Arabic",
+                      "Arabic Typesetting",
+                      "Sakkal Majalla",
+                      "DecoType Naskh",
+                      "Microsoft Uighur",
+                      "Urdu Typesetting",
+                      "Geeza Pro",
+                      "DecoType Thuluth",
+                      "Diwan Kufi",
+                      "Baghdad",
+                      "Damascus",
+                      "Farisi",
+                      "KufiStandardGK",
+                      "Nadeem",
+                      "Sana",
+                      "Times New Roman",
+                      "Arial",
+                      "Tahoma"
                     ].map(f => ({ value: f, label: f }))}
                   />
                 </div>
@@ -2775,7 +2810,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     <div className="border-t border-border pt-2 mt-2 space-y-2">
                       <p className="text-[10px] font-semibold text-muted-foreground">Selected Element Options</p>
                       {elements.find(e => e.id === selectedElementId)?.type === "text" && (
-                        <div className="space-y-2">
+                        <div className="space-y-2 border-b border-border pb-2 mb-2">
                           <div>
                             <Label className="text-[10px] mb-1 block">Content</Label>
                             <Input
@@ -2801,6 +2836,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                                 value={elements.find(e => e.id === selectedElementId)?.fontFamily || "Inter"}
                                 onValueChange={(v) => updateElement(selectedElementId, { fontFamily: v })}
                                 options={[
+                                  { value: "Quran karim 114", label: "Quran karim 114 (Quranic)" },
+                                  { value: "ArabQuranIslamic140-K7n4W", label: "ArabQuranIslamic140-K7n4W" },
+                                  { value: "ArabQuranIslamic140-vnmnZ", label: "ArabQuranIslamic140-vnmnZ" },
+                                  { value: "Noto Sans Arabic", label: "Noto Sans Arabic" },
+                                  { value: "Mirza", label: "Mirza" },
+                                  { value: "Marhey", label: "Marhey" },
+                                  { value: "Vibes", label: "Vibes" },
+                                  { value: "Baloo Bhaijaan 2", label: "Baloo Bhaijaan" },
                                   { value: "Inter", label: "Inter" },
                                   { value: "Cairo", label: "Cairo" },
                                   { value: "Amiri", label: "Amiri" },
@@ -2812,6 +2855,132 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                                   { value: "Poppins", label: "Poppins" }
                                 ]}
                               />
+                            </div>
+                          </div>
+                          
+                          {/* Stylings Row */}
+                          <div className="grid grid-cols-3 gap-1.5 pt-1">
+                            <Button
+                              variant={elements.find(e => e.id === selectedElementId)?.fontWeight === "bold" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-[9px] font-bold"
+                              onClick={() => {
+                                const current = elements.find(e => e.id === selectedElementId)?.fontWeight;
+                                updateElement(selectedElementId, { fontWeight: current === "bold" ? "normal" : "bold" });
+                              }}
+                            >
+                              Bold
+                            </Button>
+                            <Button
+                              variant={elements.find(e => e.id === selectedElementId)?.fontStyle === "italic" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-[9px] italic"
+                              onClick={() => {
+                                const current = elements.find(e => e.id === selectedElementId)?.fontStyle;
+                                updateElement(selectedElementId, { fontStyle: current === "italic" ? "normal" : "italic" });
+                              }}
+                            >
+                              Italic
+                            </Button>
+                            <SimpleSelect
+                              value={elements.find(e => e.id === selectedElementId)?.textAlign || "center"}
+                              onValueChange={(v) => updateElement(selectedElementId, { textAlign: v as any })}
+                              options={[
+                                { value: "left", label: "Left" },
+                                { value: "center", label: "Center" },
+                                { value: "right", label: "Right" }
+                              ]}
+                            />
+                          </div>
+
+                          {/* Stroke & Stroke Color */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Stroke Width ({elements.find(e => e.id === selectedElementId)?.strokeWidth || 0}px)</Label>
+                              <Slider
+                                value={[elements.find(e => e.id === selectedElementId)?.strokeWidth || 0]}
+                                onValueChange={(v) => updateElement(selectedElementId, { strokeWidth: v[0] })}
+                                min={0}
+                                max={10}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Stroke Color</Label>
+                              <input
+                                type="color"
+                                className="h-6 w-full rounded cursor-pointer"
+                                value={elements.find(e => e.id === selectedElementId)?.strokeColor || "#000000"}
+                                onChange={(e) => updateElement(selectedElementId, { strokeColor: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Shadow Color & Shadow Blur */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Shadow Blur ({elements.find(e => e.id === selectedElementId)?.shadowBlur || 0}px)</Label>
+                              <Slider
+                                value={[elements.find(e => e.id === selectedElementId)?.shadowBlur || 0]}
+                                onValueChange={(v) => updateElement(selectedElementId, { shadowBlur: v[0] })}
+                                min={0}
+                                max={25}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Shadow Color</Label>
+                              <input
+                                type="color"
+                                className="h-6 w-full rounded cursor-pointer"
+                                value={elements.find(e => e.id === selectedElementId)?.shadowColor || "#000000"}
+                                onChange={(e) => updateElement(selectedElementId, { shadowColor: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Shadow Offsets */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Shadow X ({elements.find(e => e.id === selectedElementId)?.shadowOffsetX || 0}px)</Label>
+                              <Slider
+                                value={[elements.find(e => e.id === selectedElementId)?.shadowOffsetX || 0]}
+                                onValueChange={(v) => updateElement(selectedElementId, { shadowOffsetX: v[0] })}
+                                min={-20}
+                                max={20}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Shadow Y ({elements.find(e => e.id === selectedElementId)?.shadowOffsetY || 0}px)</Label>
+                              <Slider
+                                value={[elements.find(e => e.id === selectedElementId)?.shadowOffsetY || 0]}
+                                onValueChange={(v) => updateElement(selectedElementId, { shadowOffsetY: v[0] })}
+                                min={-20}
+                                max={20}
+                                step={1}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Text Highlight / Background Box */}
+                          <div className="pt-1">
+                            <Label className="text-[10px] mb-1 block">Background Box Color</Label>
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="color"
+                                className="h-6 w-full rounded cursor-pointer"
+                                value={elements.find(e => e.id === selectedElementId)?.backgroundColor || "#000000"}
+                                onChange={(e) => updateElement(selectedElementId, { backgroundColor: e.target.value })}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[9px]"
+                                onClick={() => updateElement(selectedElementId, { backgroundColor: undefined })}
+                              >
+                                Clear Box
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -2870,7 +3039,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       value={[translationTextSize]}
                       onValueChange={(v) => setTranslationTextSize(v[0])}
                       min={12}
-                      max={64}
+                      max={120}
                       step={1}
                     />
                   </div>
@@ -2897,12 +3066,30 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                             { value: "Quran karim 114", label: "Quran karim 114 (Quranic WOFF)" },
                             { value: "ArabQuranIslamic140-K7n4W", label: "ArabQuranIslamic140-K7n4W (Quranic)" },
                             { value: "ArabQuranIslamic140-vnmnZ", label: "ArabQuranIslamic140-vnmnZ (Quranic)" },
+                            { value: "Noto Sans Arabic", label: "Noto Sans Arabic" },
+                            { value: "Mirza", label: "Mirza" },
+                            { value: "Marhey", label: "Marhey" },
+                            { value: "Vibes", label: "Vibes" },
+                            { value: "Baloo Bhaijaan 2", label: "Baloo Bhaijaan 2" },
+                            { value: "Blaka", label: "Blaka" },
+                            { value: "Blaka Ink", label: "Blaka Ink" },
+                            { value: "Gulzar", label: "Gulzar" },
+                            { value: "Aref Ruqaa Ink", label: "Aref Ruqaa Ink" },
+                            { value: "Reem Kufi Ink", label: "Reem Kufi Ink" },
+                            { value: "Reem Kufi Funky", label: "Reem Kufi Funky" },
+                            { value: "Noto Kufi Arabic", label: "Noto Kufi Arabic" },
+                            { value: "Noto Naskh Arabic", label: "Noto Naskh Arabic" },
                             { value: "Inter", label: "Inter" },
                             { value: "Cairo", label: "Cairo" },
                             { value: "Amiri", label: "Amiri" },
                             { value: "Scheherazade New", label: "Scheherazade New" },
                             { value: "Roboto", label: "Roboto" },
-                            { value: "Montserrat", label: "Montserrat" }
+                            { value: "Montserrat", label: "Montserrat" },
+                            { value: "Andalus", label: "Andalus (System)" },
+                            { value: "Aldhabi", label: "Aldhabi (System)" },
+                            { value: "Simplified Arabic", label: "Simplified Arabic (System)" },
+                            { value: "Traditional Arabic", label: "Traditional Arabic (System)" },
+                            { value: "Arabic Typesetting", label: "Arabic Typesetting (System)" }
                           ]}
                         />
                       </div>
@@ -3867,6 +4054,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         textColor={textColor}
         textShadow={textShadow}
         textSize={arabicTextSize}
+        translationTextSize={translationTextSize}
         showTranslation={showTranslation}
         aspectRatio={aspectRatio}
         arabicFont={arabicFontFamily}

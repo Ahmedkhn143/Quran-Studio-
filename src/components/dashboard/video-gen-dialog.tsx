@@ -34,6 +34,7 @@ interface VideoGenDialogProps {
   textColor: string;
   textShadow: string;
   textSize: number;
+  translationTextSize?: number;
   showTranslation: boolean;
   aspectRatio: string;
   arabicFont: string;
@@ -86,7 +87,7 @@ type GenState = "idle" | "preparing" | "rendering" | "done" | "error";
 
 export function VideoGenDialog({
   open, onClose, slides, surahName, background,
-  textColor, textShadow, textSize, showTranslation, aspectRatio, customAudioUrl, customAudioTimestamps,
+  textColor, textShadow, textSize, translationTextSize, showTranslation, aspectRatio, customAudioUrl, customAudioTimestamps,
   arabicFont, translationFont,
   overlayText, overlayTextColor, overlayTextSize, overlayTextPosition,
   elements, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer, showHighlight,
@@ -165,9 +166,6 @@ export function VideoGenDialog({
     const aspectFn = ASPECT_DIMS[aspectRatio] ?? ASPECT_DIMS["16:9"];
     const dims = aspectFn(preset.w, preset.h);
 
-    // Determine effective text size based on canvas height
-    const effectiveTextSize = Math.round((textSize / 900) * dims.h);
-
     try {
       setState("rendering");
       setStatusMsg("Starting video generation...");
@@ -176,7 +174,8 @@ export function VideoGenDialog({
         background,
         textColor,
         textShadow,
-        textSize: effectiveTextSize,
+        textSize: textSize,
+        translationTextSize: translationTextSize,
         showTranslation,
         width: dims.w,
         height: dims.h,

@@ -49,6 +49,7 @@ export interface VideoGenOptions {
   arabicXOffset?: number;
   translationYOffset?: number;
   translationXOffset?: number;
+  translationTextSize?: number;
 
   // Surah Name styling options
   showSurah?: boolean;
@@ -81,6 +82,17 @@ export interface CanvasElement {
   opacity?: number;
   imageUrl?: string;
   zIndex: number;
+  // CapCut-style text enhancements
+  fontWeight?: string; // "normal" | "bold"
+  fontStyle?: string; // "normal" | "italic"
+  textAlign?: "left" | "center" | "right";
+  strokeColor?: string;
+  strokeWidth?: number;
+  shadowColor?: string;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  backgroundColor?: string;
 }
 
 export interface SlideData {
@@ -376,7 +388,7 @@ export function drawSlide(
 
   // Arabic words — center
   const showArabic = opts.showArabic !== false;
-  const arabicFontSize = opts.textSize;
+  const arabicFontSize = Math.round((opts.textSize / 900) * h);
   const arabicFont = opts.arabicFont || '"Scheherazade New", "Amiri", serif';
   ctx.font = `bold ${arabicFontSize}px ${arabicFont}`;
   ctx.textAlign = "center";
@@ -461,7 +473,7 @@ export function drawSlide(
 
   // Translation
   if (opts.showTranslation && slide.translation) {
-    const transFontSize = Math.round(h * 0.035);
+    const transFontSize = opts.translationTextSize !== undefined ? Math.round((opts.translationTextSize / 900) * h) : Math.round(h * 0.035);
     const translationFont = opts.translationFont || "Inter, sans-serif";
     ctx.font = `500 ${transFontSize}px ${translationFont}`;
     ctx.textAlign = "center";
@@ -534,13 +546,43 @@ export function drawSlide(
       }
       
       if (el.type === "text" && el.content) {
-        ctx.fillStyle = el.color || "#ffffff";
         const fSize = el.fontSize || 24;
         const fFamily = el.fontFamily || "Inter, sans-serif";
-        ctx.font = `${fSize}px ${fFamily}`;
-        ctx.textAlign = "center";
+        const fWeight = el.fontWeight || "normal";
+        const fStyle = el.fontStyle || "normal";
+        
+        ctx.font = `${fStyle} ${fWeight} ${fSize}px ${fFamily}`;
+        ctx.textAlign = el.textAlign || "center";
         ctx.textBaseline = "middle";
+        
+        // Text background box
+        if (el.backgroundColor) {
+          const textWidth = ctx.measureText(el.content).width;
+          const paddingX = 10;
+          const paddingY = 6;
+          ctx.fillStyle = el.backgroundColor;
+          ctx.fillRect(-textWidth / 2 - paddingX, -fSize / 2 - paddingY, textWidth + paddingX * 2, fSize + paddingY * 2);
+        }
+        
+        // Text shadow
+        if (el.shadowColor) {
+          ctx.shadowColor = el.shadowColor;
+          ctx.shadowBlur = el.shadowBlur || 4;
+          ctx.shadowOffsetX = el.shadowOffsetX || 0;
+          ctx.shadowOffsetY = el.shadowOffsetY || 0;
+        }
+        
+        // Fill text
+        ctx.fillStyle = el.color || "#ffffff";
         ctx.fillText(el.content, 0, 0);
+        
+        // Text stroke/border
+        if (el.strokeColor && el.strokeWidth) {
+          ctx.shadowColor = "transparent"; // disable shadow for stroke outline
+          ctx.strokeStyle = el.strokeColor;
+          ctx.lineWidth = el.strokeWidth;
+          ctx.strokeText(el.content, 0, 0);
+        }
       } else if (el.type === "shape") {
         ctx.fillStyle = el.color || "rgba(255,255,255,0.5)";
         if (el.shapeType === "circle") {
