@@ -63,19 +63,30 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Quran Studio" }],
   icons: {
-    icon: "/logo.svg",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
   openGraph: {
     title: "Quran Studio — Free Online Quran Video Generator",
     description:
       "Create stunning Quran videos for YouTube, TikTok & Instagram — free in your browser.",
     type: "website",
+    images: [
+      {
+        url: "/logo.png",
+        width: 512,
+        height: 512,
+        alt: "Quran Studio Logo",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Quran Studio — Free Online Quran Video Generator",
     description:
       "Create stunning Quran videos for YouTube, TikTok & Instagram — free in your browser.",
+    images: ["/logo.png"],
   },
 };
 

@@ -50,6 +50,12 @@ export interface VideoGenOptions {
   translationYOffset?: number;
   translationXOffset?: number;
   translationTextSize?: number;
+  translationColor?: string;
+  translationBgColor?: string;
+  translationBgOpacity?: number;
+  translationShadowColor?: string;
+  translationShadowBlur?: number;
+  translationBackgroundType?: "none" | "box" | "rounded" | "glass";
 
   // Surah Name styling options
   showSurah?: boolean;
@@ -506,13 +512,59 @@ export function drawSlide(
     }
     const transXOffsetPx = opts.translationXOffset ? (opts.translationXOffset / 100) * w : 0;
     const boxW = maxLineW + padX * 2;
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.fillRect(w / 2 - boxW / 2 + transXOffsetPx, transY, boxW, boxH);
-    // Text
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    
+    // Draw background box
+    const bgType = opts.translationBackgroundType ?? "box";
+    const bgOpacityVal = opts.translationBgOpacity !== undefined ? opts.translationBgOpacity / 100 : 0.4;
+    const bgCol = opts.translationBgColor || "#000000";
+    
+    let fillStyle = "rgba(0,0,0,0.4)";
+    if (bgCol.startsWith("#")) {
+      const hex = bgCol.replace("#", "");
+      const r = parseInt(hex.substring(0, 2), 16) || 0;
+      const g = parseInt(hex.substring(2, 4), 16) || 0;
+      const b = parseInt(hex.substring(4, 6), 16) || 0;
+      fillStyle = `rgba(${r},${g},${b},${bgOpacityVal})`;
+    } else if (bgCol.startsWith("rgb")) {
+      fillStyle = bgCol;
+    }
+
+    if (bgType !== "none") {
+      ctx.save();
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = fillStyle;
+      const boxX = w / 2 - boxW / 2 + transXOffsetPx;
+      if (bgType === "rounded") {
+        ctx.beginPath();
+        ctx.roundRect(boxX, transY, boxW, boxH, h * 0.012);
+        ctx.fill();
+      } else if (bgType === "glass") {
+        ctx.beginPath();
+        ctx.roundRect(boxX, transY, boxW, boxH, h * 0.012);
+        ctx.fillStyle = fillStyle || "rgba(255, 255, 255, 0.1)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.fillRect(boxX, transY, boxW, boxH);
+      }
+      ctx.restore();
+    }
+
+    // Draw text with shadow
+    ctx.save();
+    if (opts.translationShadowColor) {
+      ctx.shadowColor = opts.translationShadowColor;
+      ctx.shadowBlur = opts.translationShadowBlur !== undefined ? opts.translationShadowBlur : 4;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+    }
+    ctx.fillStyle = opts.translationColor || "rgba(255,255,255,0.9)";
     transLines.forEach((line, i) => {
       ctx.fillText(line, w / 2 + transXOffsetPx, transY + padY + i * lineH);
     });
+    ctx.restore();
   }
 
   // Watermark/Custom Overlay Text

@@ -40,6 +40,38 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Al Qalam Quran Majeed';
+  src: url('https://cdn.jsdelivr.net/gh/ShakesVision/QuranFont/Al-Qalam-Quran-Majeed.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'PDMS Saleem Quran';
+  src: url('https://cdn.jsdelivr.net/gh/ShakesVision/QuranFont/pdms-saleem-quranfont.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'LPMQ Isep Misbah';
+  src: url('https://cdn.jsdelivr.net/gh/utrodus/flutter-ayatnesia-quran-search/assets/fonts/LPMQ-IsepMisbah.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Digital Khatt V2';
+  src: url('https://cdn.jsdelivr.net/gh/quran8vs/IndoPak/fonts/DigitalKhattIndoPak-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @import "tailwindcss";
 @import "tw-animate-css";
 

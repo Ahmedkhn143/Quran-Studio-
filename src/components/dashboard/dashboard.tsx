@@ -238,6 +238,12 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [showTranslation, setShowTranslation] = useState(true);
   const [arabicFont, setArabicFont] = useState<string>("Cairo");
   const [translationFont, setTranslationFont] = useState<string>("Inter");
+  const [translationColor, setTranslationColor] = useState("#ffffff");
+  const [translationBgColor, setTranslationBgColor] = useState("#000000");
+  const [translationBgOpacity, setTranslationBgOpacity] = useState(40);
+  const [translationShadowColor, setTranslationShadowColor] = useState("rgba(0,0,0,0.6)");
+  const [translationShadowBlur, setTranslationShadowBlur] = useState(4);
+  const [translationBackgroundType, setTranslationBackgroundType] = useState<"none" | "box" | "rounded" | "glass">("box");
   const [showArabic, setShowArabic] = useState(true);
   const [highlightType, setHighlightType] = useState<"color" | "gradient">("color");
   const [highlightColor, setHighlightColor] = useState("#d4a017");
@@ -314,9 +320,14 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       case "me_quran":
         return '"Scheherazade New", "Amiri", serif';
       case "PDMS Saleem Quran Font":
-        return '"Noto Naskh Arabic", "Amiri", serif';
+      case "PDMS Saleem Quran":
+        return '"PDMS Saleem Quran", "Noto Naskh Arabic", "Amiri", serif';
       case "LPMQ Isep Misbah":
-        return '"Noto Naskh Arabic", "Amiri", serif';
+        return '"LPMQ Isep Misbah", "Noto Naskh Arabic", "Amiri", serif';
+      case "Al Qalam Quran Majeed":
+        return '"Al Qalam Quran Majeed", "Amiri", serif';
+      case "Digital Khatt V2":
+        return '"Digital Khatt V2", "Scheherazade New", "Amiri", serif';
       default:
         return arabicFont;
     }
@@ -566,6 +577,12 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       arabicXOffset,
       translationYOffset,
       translationXOffset,
+      translationColor,
+      translationBgColor,
+      translationBgOpacity,
+      translationShadowColor,
+      translationShadowBlur,
+      translationBackgroundType,
       showArabic,
       highlightColor,
       highlightGradientStart: highlightType === "gradient" ? highlightGradientStart : undefined,
@@ -590,7 +607,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     audioDuration, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer,
     arabicYOffset, arabicXOffset, translationYOffset, translationXOffset, showArabic, highlightType, highlightColor, highlightGradientStart,
     highlightGradientEnd, highlightGlowColor, showSurah, surahFont, surahFontSize, surahColor, surahBgOpacity,
-    surahXOffset, surahYOffset, customSurahName
+    surahXOffset, surahYOffset, customSurahName, translationColor, translationBgColor, translationBgOpacity,
+    translationShadowColor, translationShadowBlur, translationBackgroundType
   ]);
 
   // History & Undo/Redo
@@ -2696,6 +2714,11 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     onValueChange={setArabicFont}
                     options={[
                       "Quran karim 114",
+                      "KFGQPC Uthmanic Script Hafs",
+                      "Al Qalam Quran Majeed",
+                      "PDMS Saleem Quran",
+                      "LPMQ Isep Misbah",
+                      "Digital Khatt V2",
                       "ArabQuranIslamic140-K7n4W",
                       "ArabQuranIslamic140-vnmnZ",
                       "Noto Sans Arabic",
@@ -3369,6 +3392,95 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                             onValueChange={(v) => setSurahYOffset(v[0])}
                             min={-100}
                             max={100}
+                            step={1}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Translation Styling Options */}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-foreground">Translation Styling</p>
+                    <Switch
+                      checked={showTranslation}
+                      onCheckedChange={setShowTranslation}
+                    />
+                  </div>
+
+                  {showTranslation && (
+                    <div className="space-y-2.5">
+                      {/* Text Color & Background Color */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Text Color</Label>
+                          <input
+                            type="color"
+                            className="h-7 w-full rounded cursor-pointer"
+                            value={translationColor}
+                            onChange={(e) => setTranslationColor(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Background Color</Label>
+                          <input
+                            type="color"
+                            className="h-7 w-full rounded cursor-pointer"
+                            value={translationBgColor}
+                            onChange={(e) => setTranslationBgColor(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Background Style Select */}
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Background Style</Label>
+                        <SimpleSelect
+                          value={translationBackgroundType}
+                          onValueChange={(v) => setTranslationBackgroundType(v as any)}
+                          options={[
+                            { value: "none", label: "No Background" },
+                            { value: "box", label: "Rectangular Box" },
+                            { value: "rounded", label: "Rounded Badge" },
+                            { value: "glass", label: "Glassmorphism" }
+                          ]}
+                        />
+                      </div>
+
+                      {/* Background Opacity */}
+                      {translationBackgroundType !== "none" && (
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Background Opacity ({translationBgOpacity}%)</Label>
+                          <Slider
+                            value={[translationBgOpacity]}
+                            onValueChange={(v) => setTranslationBgOpacity(v[0])}
+                            min={0}
+                            max={100}
+                            step={1}
+                          />
+                        </div>
+                      )}
+
+                      {/* Shadow Color & Shadow Blur */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Shadow Color</Label>
+                          <input
+                            type="color"
+                            className="h-7 w-full rounded cursor-pointer"
+                            value={translationShadowColor.startsWith("rgba") ? "#000000" : translationShadowColor}
+                            onChange={(e) => setTranslationShadowColor(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Shadow Blur ({translationShadowBlur}px)</Label>
+                          <Slider
+                            value={[translationShadowBlur]}
+                            onValueChange={(v) => setTranslationShadowBlur(v[0])}
+                            min={0}
+                            max={20}
                             step={1}
                           />
                         </div>
@@ -4315,6 +4427,12 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         surahBgOpacity={surahBgOpacity}
         surahXOffset={surahXOffset}
         surahYOffset={surahYOffset}
+        translationColor={translationColor}
+        translationBgColor={translationBgColor}
+        translationBgOpacity={translationBgOpacity}
+        translationShadowColor={translationShadowColor}
+        translationShadowBlur={translationShadowBlur}
+        translationBackgroundType={translationBackgroundType}
       />
     </motion.div>
   );
