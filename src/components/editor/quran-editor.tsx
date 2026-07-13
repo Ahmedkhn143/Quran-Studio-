@@ -187,7 +187,10 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
   }, [selectedSurah, selectedAyah, reciter, translation]);
 
   useEffect(() => {
-    loadAyah();
+    const timer = setTimeout(() => {
+      loadAyah();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadAyah]);
 
   // --- Continuous full-ayah audio playback with word highlighting ---
@@ -204,13 +207,17 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
       landingPlaybackRef.current.audio = null;
     }
 
-    if (!isPlaying || !ayahData?.audio) return;
+    const timer = setTimeout(() => {
+      if (isPlaying && ayahData?.audio) {
+        setActiveWordIdx(0);
+        setProgress(0);
+      }
+    }, 0);
+
+    if (!isPlaying || !ayahData?.audio) return () => clearTimeout(timer);
 
     const session = { cancelled: false, audio: null as HTMLAudioElement | null };
     landingPlaybackRef.current = session;
-
-    setActiveWordIdx(0);
-    setProgress(0);
 
     const audio = new Audio();
     audio.src = ayahData.audio;
@@ -270,6 +277,7 @@ export function QuranEditor({ onOpenDashboard }: { onOpenDashboard?: () => void 
 
     return () => {
       session.cancelled = true;
+      clearTimeout(timer);
       try { audio.pause(); } catch {}
     };
   }, [isPlaying, ayahData, volume]);

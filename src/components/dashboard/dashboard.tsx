@@ -8,7 +8,8 @@ import {
   ChevronDown, Wand2, Film, X, Upload, FolderOpen, Trash2, Cloud,
   Save, Layers, Palette, Settings2, Plus, Check, FileVideo,
   Monitor, Smartphone, Square as SquareIcon, RectangleHorizontal,
-  RectangleVertical, Music, BookOpen, Send, Folder, Undo, Redo, ZoomIn, ZoomOut
+  RectangleVertical, Music, BookOpen, Send, Folder, Undo, Redo, ZoomIn, ZoomOut,
+  RotateCcw, RotateCw, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -172,9 +173,22 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
+  const exportAudioFileInputRef = useRef<HTMLInputElement | null>(null);
   const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
   const [customAudioName, setCustomAudioName] = useState<string | null>(null);
   const [bgOpacity, setBgOpacity] = useState(100);
+
+  // Custom audio timestamps & mobile tabs
+  const [mobileActiveTab, setMobileActiveTab] = useState<"content" | "preview" | "design">("preview");
+  const [customAudioTimestamps, setCustomAudioTimestamps] = useState<Record<number, { start: number; end: number }>>({});
+  const [showTimestampDialog, setShowTimestampDialog] = useState(false);
+  const [testPlayingIdx, setTestPlayingIdx] = useState<number | null>(null);
+  const testAudioRef = useRef<HTMLAudioElement | null>(null);
+  const dialogAudioRef = useRef<HTMLAudioElement | null>(null);
+  const dialogWaveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [dialogPlayhead, setDialogPlayhead] = useState(0);
+  const [dialogIsPlaying, setDialogIsPlaying] = useState(false);
+
 
   // Custom gradient state
   const [customGradientStart, setCustomGradientStart] = useState("#8b3a2a");
@@ -236,6 +250,30 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
   // Redraw preview
   const [redrawCount, setRedrawCount] = useState(0);
+ 
+  // Derived values
+  const currentSurah = surahs.find((s) => s.number === selectedSurah);
+  const maxAyah = currentSurah?.numberOfAyahs ?? 7;
+
+  const arabicFontFamily = (() => {
+    switch (arabicFont) {
+      case "KFGQPC Uthmanic Script Hafs":
+        return '"Scheherazade New", "Amiri", serif';
+      case "Amiri Quran":
+        return '"Amiri Quran", "Amiri", serif';
+      case "Scheherazade":
+        return '"Scheherazade", "Scheherazade New", serif';
+      case "me_quran":
+        return '"Scheherazade New", "Amiri", serif';
+      case "PDMS Saleem Quran Font":
+        return '"Noto Naskh Arabic", "Amiri", serif';
+      case "LPMQ Isep Misbah":
+        return '"Noto Naskh Arabic", "Amiri", serif';
+      default:
+        return arabicFont;
+    }
+  })();
+  const translationFontFamily = translationFont;
 
   // --- Video output ---
   const [aspectRatio, setAspectRatio] = useState("16:9");
@@ -383,7 +421,10 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     // Only trigger auto-reload if slides are already loaded to avoid mount conflicts
     if (slides.length > 1 || (slides.length === 1 && slides[0].numberInSurah !== 0)) {
-      loadSlides({ silent: true });
+      const timer = setTimeout(() => {
+        loadSlides({ silent: true });
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [translation, reciter, prependBismillah]);
 
@@ -649,28 +690,132 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       setPeaks(decoded.peaks);
       setAudioDuration(decoded.duration);
       
-      const detection = detectSurahFromAudio(decoded.duration);
-      setDetectedSurah(detection.surahNumber);
-      setDetectionConfidence(detection.confidence);
-      
       const localUrl = URL.createObjectURL(file);
       setCustomAudioUrl(localUrl);
       setCustomAudioName(file.name);
+
+      toast.info("Analyzing recitation using AI...");
       
-      setSelectedSurah(detection.surahNumber);
-      setFromAyah(1);
-      const toAy = Math.min(10, SURAHS_DB.find(s => s.number === detection.surahNumber)?.numberOfAyahs || 1);
-      setToAyah(toAy);
+      // Call the AI detection endpoint
+      const formData = new FormData();
+      formData.append("file", file);
       
-      toast.success(`Detected: ${SURAHS_DB.find(s => s.number === detection.surahNumber)?.englishName} (${detection.confidence}% confidence)`);
+      let detectedSurahNum = 1;
+      let detectedFromAyah = 1;
+      let detectedToAyah = 7;
+      let confidence = 0;
+      let matchedByAI = false;
+
+      try {
+        const res = await fetch("/api/ai/detect-quran", {
+          method: "POST",
+          body: formData
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok) {
+            detectedSurahNum = data.surah;
+            detectedFromAyah = data.fromAyah;
+            detectedToAyah = data.toAyah;
+            confidence = data.confidence;
+            matchedByAI = true;
+          }
+        }
+      } catch (err) {
+        console.error("AI detection request failed, falling back to duration heuristic:", err);
+      }
+
+      if (!matchedByAI) {
+        // Fallback to duration-based heuristic
+        const detection = detectSurahFromAudio(decoded.duration);
+        detectedSurahNum = detection.surahNumber;
+        detectedFromAyah = 1;
+        detectedToAyah = Math.min(10, SURAHS_DB.find(s => s.number === detection.surahNumber)?.numberOfAyahs || 1);
+        confidence = detection.confidence;
+      }
+      
+      setDetectedSurah(detectedSurahNum);
+      setDetectionConfidence(confidence);
+      setSelectedSurah(detectedSurahNum);
+      setFromAyah(detectedFromAyah);
+      setToAyah(detectedToAyah);
+      
+      const surahName = SURAHS_DB.find(s => s.number === detectedSurahNum)?.englishName || "Unknown Surah";
+      toast.success(
+        matchedByAI 
+          ? `AI Detected: ${surahName} (Ayah ${detectedFromAyah}–${detectedToAyah}) with ${confidence}% confidence`
+          : `Estimated: ${surahName} (${confidence}% confidence)`
+      );
       
       // Auto-load detected surah slides immediately
       setTimeout(() => {
-        loadSlides({ surah: detection.surahNumber, from: 1, to: toAy, silent: true });
+        loadSlides({ surah: detectedSurahNum, from: detectedFromAyah, to: detectedToAyah, silent: true });
       }, 200);
     } catch (err: any) {
       toast.error("Audio decoding failed: " + err.message);
     }
+  };
+
+  const handleAudioDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) {
+      const mockEvent = {
+        target: {
+          files: [f],
+          value: ""
+        }
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+      handleAudioUpload(mockEvent);
+    }
+  };
+
+  const playTestAyah = (index: number) => {
+    if (testAudioRef.current) {
+      testAudioRef.current.pause();
+    }
+    const ts = customAudioTimestamps[index] || { start: 0, end: audioDuration || 10 };
+    const audio = new Audio(customAudioUrl!);
+    audio.currentTime = ts.start;
+    audio.play();
+    testAudioRef.current = audio;
+    setTestPlayingIdx(index);
+
+    const checkEnd = setInterval(() => {
+      if (audio.currentTime >= ts.end || audio.paused || audio.ended) {
+        audio.pause();
+        clearInterval(checkEnd);
+        setTestPlayingIdx(null);
+      }
+    }, 100);
+  };
+
+  const stopTestAyah = () => {
+    if (testAudioRef.current) {
+      testAudioRef.current.pause();
+    }
+    setTestPlayingIdx(null);
+  };
+
+  const autoDistributeTimestamps = () => {
+    if (!audioDuration) {
+      toast.error("Audio duration not available yet.");
+      return;
+    }
+    const count = slides.length;
+    if (count === 0) return;
+    const segment = audioDuration / count;
+    const newTimestamps: Record<number, { start: number; end: number }> = {};
+    for (let i = 0; i < count; i++) {
+      newTimestamps[i] = {
+        start: parseFloat((i * segment).toFixed(2)),
+        end: parseFloat(((i + 1) * segment).toFixed(2)),
+      };
+    }
+    setCustomAudioTimestamps(newTimestamps);
+    toast.success("Timestamps distributed equally!");
   };
 
   // Draw timeline waveform effect
@@ -680,6 +825,173 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     const playProgress = isPlaying ? progress / 100 : 0;
     drawWaveform(canvas, peaks, playProgress);
   }, [peaks, progress, isPlaying]);
+
+  // Auto-distribute timestamps when custom audio and slides are loaded
+  useEffect(() => {
+    if (customAudioUrl && audioDuration && slides.length > 0) {
+      if (Object.keys(customAudioTimestamps).length === 0) {
+        const segment = audioDuration / slides.length;
+        const newTimestamps: Record<number, { start: number; end: number }> = {};
+        for (let i = 0; i < slides.length; i++) {
+          newTimestamps[i] = {
+            start: parseFloat((i * segment).toFixed(2)),
+            end: parseFloat(((i + 1) * segment).toFixed(2)),
+          };
+        }
+        setCustomAudioTimestamps(newTimestamps);
+        toast.info("Auto-distributed audio timings across slides");
+      }
+    }
+  }, [customAudioUrl, audioDuration, slides.length]);
+
+
+  // Visual Audio Editor Scrubber & Timeline Render
+  useEffect(() => {
+    const canvas = dialogWaveformCanvasRef.current;
+    if (!canvas || peaks.length === 0 || !audioDuration) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw background grid lines
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+
+    // Draw slide background ranges
+    slides.forEach((s, idx) => {
+      const ts = customAudioTimestamps[idx] || { start: 0, end: 0 };
+      if (ts.end > ts.start) {
+        const startX = (ts.start / audioDuration) * w;
+        const endX = (ts.end / audioDuration) * w;
+        
+        const hue = (idx * 137.5) % 360;
+        ctx.fillStyle = `hsla(${hue}, 70%, 40%, 0.12)`;
+        ctx.fillRect(startX, 0, endX - startX, h);
+        
+        ctx.strokeStyle = `hsla(${hue}, 70%, 50%, 0.3)`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(startX, 0);
+        ctx.lineTo(startX, h);
+        ctx.moveTo(endX, 0);
+        ctx.lineTo(endX, h);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.font = "8px monospace";
+        ctx.fillText(`S${idx + 1}`, startX + 4, 12);
+      }
+    });
+
+    // Draw peaks
+    const barWidth = w / peaks.length;
+    const gap = 1;
+    const playProgress = dialogPlayhead / audioDuration;
+
+    peaks.forEach((peak, i) => {
+      const x = i * barWidth;
+      const barHeight = peak * (h * 0.7);
+      const y = (h - barHeight) / 2;
+      const progressPct = i / peaks.length;
+
+      if (progressPct <= playProgress) {
+        ctx.fillStyle = "#d4a017"; // Gold for active
+      } else {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.25)"; // Gray for inactive
+      }
+      ctx.fillRect(x, y, barWidth - gap, barHeight);
+    });
+
+    // Draw active playhead line
+    const playheadX = playProgress * w;
+    ctx.strokeStyle = "#ef4444"; // Red playhead
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(playheadX, 0);
+    ctx.lineTo(playheadX, h);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.arc(playheadX, 4, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }, [peaks, dialogPlayhead, audioDuration, customAudioTimestamps, slides]);
+
+  const handleDialogWaveformClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = dialogWaveformCanvasRef.current;
+    if (!canvas || !audioDuration || !dialogAudioRef.current) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickPercentage = clickX / rect.width;
+    const targetTime = clickPercentage * audioDuration;
+    
+    dialogAudioRef.current.currentTime = targetTime;
+    setDialogPlayhead(targetTime);
+  };
+
+  const captureStart = (idx: number) => {
+    if (!dialogAudioRef.current) return;
+    const now = parseFloat(dialogAudioRef.current.currentTime.toFixed(2));
+    setCustomAudioTimestamps(prev => ({
+      ...prev,
+      [idx]: { ...prev[idx], start: now }
+    }));
+    toast.success(`Slide ${idx + 1} start set to ${now}s`);
+  };
+
+  const captureEnd = (idx: number) => {
+    if (!dialogAudioRef.current) return;
+    const now = parseFloat(dialogAudioRef.current.currentTime.toFixed(2));
+    setCustomAudioTimestamps(prev => ({
+      ...prev,
+      [idx]: { ...prev[idx], end: now }
+    }));
+    toast.success(`Slide ${idx + 1} end set to ${now}s`);
+  };
+
+  const adjustTime = (idx: number, type: "start" | "end", amount: number) => {
+    setCustomAudioTimestamps(prev => {
+      const ts = prev[idx] || { start: 0, end: 0 };
+      const val = Math.max(0, parseFloat((ts[type] + amount).toFixed(2)));
+      return {
+        ...prev,
+        [idx]: { ...ts, [type]: val }
+      };
+    });
+  };
+
+  const playSlideSegment = (idx: number) => {
+    const ts = customAudioTimestamps[idx] || { start: 0, end: 0 };
+    if (!dialogAudioRef.current) return;
+    
+    dialogAudioRef.current.pause();
+    dialogAudioRef.current.currentTime = ts.start;
+    dialogAudioRef.current.play().catch(() => {});
+    
+    setTestPlayingIdx(idx);
+    
+    const checkEnd = setInterval(() => {
+      if (!dialogAudioRef.current) {
+        clearInterval(checkEnd);
+        return;
+      }
+      if (dialogAudioRef.current.currentTime >= ts.end || dialogAudioRef.current.paused || dialogAudioRef.current.ended) {
+        dialogAudioRef.current.pause();
+        clearInterval(checkEnd);
+        setTestPlayingIdx(null);
+      }
+    }, 50);
+  };
+
 
   // Save/Load Project State
   const saveProject = () => {
@@ -704,7 +1016,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       transitionEffect,
       showAudioVisualizer,
       arabicYOffset,
-      translationYOffset
+      translationYOffset,
+      customAudioTimestamps
     };
     localStorage.setItem("quran_project_save", JSON.stringify(project));
     toast.success("Project saved successfully!");
@@ -738,6 +1051,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       if (p.showAudioVisualizer !== undefined) setShowAudioVisualizer(p.showAudioVisualizer);
       if (p.arabicYOffset !== undefined) setArabicYOffset(p.arabicYOffset);
       if (p.translationYOffset !== undefined) setTranslationYOffset(p.translationYOffset);
+      if (p.customAudioTimestamps) setCustomAudioTimestamps(p.customAudioTimestamps);
       toast.success("Project loaded successfully!");
     } catch {
       toast.error("Failed to parse saved project");
@@ -762,19 +1076,24 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       try { playbackSessionRef.current.currentAudio.pause(); } catch {}
       playbackSessionRef.current.currentAudio = null;
     }
-    setCurrentTime(0);
-    setAudioDuration(0);
+    
+    // Defer state updates to avoid synchronous cascading renders
+    const timer = setTimeout(() => {
+      setCurrentTime(0);
+      setAudioDuration(0);
+      if (isPlaying && currentAudioSrc) {
+        setActiveWordIdx(0);
+        setProgress(0);
+      }
+    }, 0);
 
     if (!isPlaying || !currentAudioSrc) {
-      return;
+      return () => clearTimeout(timer);
     }
 
     // Start a new session
     const session = { cancelled: false, currentAudio: null as HTMLAudioElement | null };
     playbackSessionRef.current = session;
-
-    setActiveWordIdx(0);
-    setProgress(0);
 
     // Create a single audio element for the entire ayah
     const audio = new Audio();
@@ -785,24 +1104,50 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     session.currentAudio = audio;
 
     const totalWords = currentAyah.words.length;
+    const ts = customAudioTimestamps[currentSlide];
+    const startSec = (ts && ts.start !== undefined) ? ts.start : 0;
+    const endSec = (ts && ts.end !== undefined) ? ts.end : 0;
 
     // Highlight words based on audio currentTime
     // Each word gets an equal slice of the audio duration
     const updateHighlight = () => {
-      if (session.cancelled || !audio.duration) return;
+      if (session.cancelled) return;
       const t = audio.currentTime;
-      const dur = audio.duration;
+      const dur = audio.duration || 1;
+
+      // Handle custom audio playback end boundary
+      if (customAudioUrl && endSec > startSec && t >= endSec) {
+        audio.pause();
+        audio.onended?.(new Event("ended"));
+        return;
+      }
+
       setCurrentTime(t);
       setAudioDuration(dur);
-      // Map current time to word index (even slices)
-      const idx = Math.min(totalWords - 1, Math.floor((t / dur) * totalWords));
-      setActiveWordIdx(idx);
-      setProgress(Math.round((t / dur) * 100));
+
+      if (customAudioUrl && endSec > startSec) {
+        const segDuration = endSec - startSec;
+        const segElapsed = Math.max(0, t - startSec);
+        const relativeProgress = Math.min(100, (segElapsed / segDuration) * 100);
+        setProgress(Math.round(relativeProgress));
+        
+        const idx = Math.min(totalWords - 1, Math.floor((segElapsed / segDuration) * totalWords));
+        setActiveWordIdx(idx);
+      } else {
+        const idx = Math.min(totalWords - 1, Math.floor((t / dur) * totalWords));
+        setActiveWordIdx(idx);
+        setProgress(Math.round((t / dur) * 100));
+      }
     };
 
     audio.ontimeupdate = updateHighlight;
     audio.onloadedmetadata = () => {
-      if (!session.cancelled && audio.duration) setAudioDuration(audio.duration);
+      if (!session.cancelled) {
+        setAudioDuration(audio.duration || 0);
+        if (customAudioUrl && startSec > 0) {
+          audio.currentTime = startSec;
+        }
+      }
     };
 
     audio.onended = () => {
@@ -842,6 +1187,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
     ready.then(() => {
       if (session.cancelled) return;
+      if (customAudioUrl && startSec > 0) {
+        audio.currentTime = startSec;
+      }
       audio.play().catch((err: any) => {
         if (err?.name === "NotAllowedError") {
           toast.error("Browser blocked autoplay. Click Play again.");
@@ -855,6 +1203,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
     return () => {
       session.cancelled = true;
+      clearTimeout(timer);
       try { audio.pause(); } catch {}
     };
   }, [isPlaying, currentAyah, currentAudioSrc, volume]);
@@ -1013,11 +1362,6 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     }, 600);
   };
 
-  // =====================
-  // Derived values
-  // =====================
-  const currentSurah = surahs.find((s) => s.number === selectedSurah);
-  const maxAyah = currentSurah?.numberOfAyahs ?? 7;
   const filteredSurahs = surahs.filter((s) => {
     const q = surahQuery.toLowerCase();
     if (!q) return true;
@@ -1052,25 +1396,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const textSizeMap: Record<string, string> = { sm: "1.5rem", md: "2.25rem", lg: "3rem", xl: "3.75rem" };
   const textSizeValue = textSizeMap[textSize] ?? "2.25rem";
 
-  const arabicFontFamily = (() => {
-    switch (arabicFont) {
-      case "KFGQPC Uthmanic Script Hafs":
-        return '"Scheherazade New", "Amiri", serif';
-      case "Amiri Quran":
-        return '"Amiri Quran", "Amiri", serif';
-      case "Scheherazade":
-        return '"Scheherazade", "Scheherazade New", serif';
-      case "me_quran":
-        return '"Scheherazade New", "Amiri", serif';
-      case "PDMS Saleem Quran Font":
-        return '"Noto Naskh Arabic", "Amiri", serif';
-      case "LPMQ Isep Misbah":
-        return '"Noto Naskh Arabic", "Amiri", serif';
-      default:
-        return arabicFont;
-    }
-  })();
-  const translationFontFamily = translationFont;
+
 
   const aspectClass = ASPECT_RATIOS.find((a) => a.id === aspectRatio)?.className ?? "aspect-16-9";
 
@@ -1172,9 +1498,11 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       </header>
 
       {/* Main 3-panel layout */}
-      <div className="grid flex-1 overflow-hidden bg-background lg:grid-cols-[320px_1fr_340px] xl:grid-cols-[320px_1fr_340px] md:grid-cols-1">
+      <div className="flex flex-1 overflow-hidden bg-background lg:grid lg:grid-cols-[320px_1fr_340px] xl:grid-cols-[320px_1fr_340px]">
         {/* ============ LEFT PANEL ============ */}
-        <aside className="flex flex-col border-r border-border bg-card overflow-hidden">
+        <aside className={`flex-col border-r border-border bg-card overflow-hidden w-full lg:w-auto shrink-0 lg:flex ${
+          mobileActiveTab === "content" ? "flex" : "hidden"
+        }`}>
           <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as any)} className="flex h-full flex-col">
             <TabsList className="grid w-full shrink-0 grid-cols-2 rounded-none border-b border-border bg-card p-0">
               <TabsTrigger value="content" className="rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--gold)] text-xs">
@@ -1305,7 +1633,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       className={`drop-zone rounded-lg border-2 border-dashed border-border p-3 text-center ${dragOver ? "dragging" : ""}`}
                       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                       onDragLeave={() => setDragOver(false)}
-                      onDrop={handleDrop}
+                      onDrop={handleAudioDrop}
                     >
                       <Upload className="mx-auto mb-1 h-4 w-4 text-muted-foreground" />
                       <p className="text-[10px] text-muted-foreground">
@@ -1320,27 +1648,42 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       <input
                         ref={audioFileInputRef}
                         type="file"
-                        accept="audio/mpeg,audio/mp3"
+                        accept="audio/mpeg,audio/mp3,audio/*"
                         className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) {
-                            if (customAudioUrl?.startsWith("blob:")) {
-                              URL.revokeObjectURL(customAudioUrl);
-                            }
-                            const objectUrl = URL.createObjectURL(f);
-                            setCustomAudioUrl(objectUrl);
-                            setCustomAudioName(f.name);
-                            toast.success(`Using custom audio: ${f.name}`);
-                          }
-                          e.target.value = "";
-                        }}
+                        onChange={handleAudioUpload}
                       />
                     </div>
                     {customAudioName && (
-                      <p className="mt-1 text-[10px] text-emerald-700 dark:text-[var(--gold)]">
-                        Active: {customAudioName}
-                      </p>
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] truncate max-w-[180px] font-medium text-emerald-700 dark:text-[var(--gold)]">
+                            Active: {customAudioName}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-red-500 hover:text-red-700"
+                            onClick={() => {
+                              if (customAudioUrl?.startsWith("blob:")) {
+                                URL.revokeObjectURL(customAudioUrl);
+                              }
+                              setCustomAudioUrl(null);
+                              setCustomAudioName(null);
+                              setCustomAudioTimestamps({});
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs h-7 border-emerald-600/30 text-emerald-700 dark:text-[var(--gold)] dark:border-[var(--gold)]/30 hover:bg-emerald-50 dark:hover:bg-[var(--gold-soft)]/20"
+                          onClick={() => setShowTimestampDialog(true)}
+                        >
+                          <Settings2 className="mr-1.5 h-3 w-3" /> Manage Audio Timestamps
+                        </Button>
+                      </div>
                     )}
                   </div>
 
@@ -1433,7 +1776,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         </aside>
 
         {/* ============ CENTER CANVAS ============ */}
-        <main className="flex flex-col overflow-hidden bg-muted/30">
+        <main className={`flex-col overflow-hidden bg-muted/30 flex-1 min-w-0 lg:flex ${
+          mobileActiveTab === "preview" ? "flex" : "hidden"
+        }`}>
           {/* Canvas toolbar */}
           <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-2">
             <div className="flex items-center gap-2">
@@ -1764,7 +2109,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         </main>
 
         {/* ============ RIGHT PANEL ============ */}
-        <aside className="flex flex-col border-l border-border bg-card overflow-hidden">
+        <aside className={`flex-col border-l border-border bg-card overflow-hidden w-full lg:w-auto shrink-0 lg:max-w-[340px] lg:flex ${
+          mobileActiveTab === "design" ? "flex" : "hidden"
+        }`}>
           <Tabs defaultValue="bg" className="flex h-full flex-col">
             <TabsList className="grid w-full shrink-0 grid-cols-4 rounded-none border-b border-border bg-card p-0">
               <TabsTrigger value="bg" className="rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--gold)] text-[11px]">
@@ -2697,7 +3044,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     <Input
                       type="file"
                       accept="audio/*"
-                      ref={audioFileInputRef}
+                      ref={exportAudioFileInputRef}
                       onChange={handleAudioUpload}
                       className="h-8 text-xs cursor-pointer"
                     />
@@ -2751,6 +3098,375 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         </aside>
       </div>
 
+      {/* Mobile Bottom Navigation */}
+      <div className="flex h-16 shrink-0 items-center justify-around border-t border-border bg-card px-2 py-1 shadow-inner lg:hidden">
+        <button
+          onClick={() => setMobileActiveTab("content")}
+          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-all ${
+            mobileActiveTab === "content" ? "text-emerald-700 dark:text-[var(--gold)] font-bold" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <BookOpen className="h-5 w-5" />
+          <span>Surah & Content</span>
+        </button>
+        <button
+          onClick={() => setMobileActiveTab("preview")}
+          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-all ${
+            mobileActiveTab === "preview" ? "text-emerald-700 dark:text-[var(--gold)] font-bold" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Play className="h-5 w-5" />
+          <span>Preview Frame</span>
+        </button>
+        <button
+          onClick={() => setMobileActiveTab("design")}
+          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-all ${
+            mobileActiveTab === "design" ? "text-emerald-700 dark:text-[var(--gold)] font-bold" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Palette className="h-5 w-5" />
+          <span>Design Styles</span>
+        </button>
+      </div>
+
+      {/* Custom Audio Timestamps Dialog (Visual Audio Editor) */}
+      {showTimestampDialog && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 md:p-6">
+          <div className="flex flex-col w-full max-w-5xl max-h-[90vh] rounded-2xl border border-white/10 bg-zinc-950 text-zinc-100 shadow-2xl shadow-emerald-950/20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 p-5 bg-zinc-900/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-emerald-600/10 text-emerald-400">
+                  <Music className="h-5 w-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
+                    Visual Audio Editor & Sync
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0.5">
+                      Expert Mode
+                    </Badge>
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate max-w-[400px]">{customAudioName}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full"
+                onClick={() => { stopTestAyah(); setShowTimestampDialog(false); }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Hidden Master Audio for Dialog */}
+            <audio
+              ref={dialogAudioRef}
+              src={customAudioUrl || ""}
+              onTimeUpdate={(e) => setDialogPlayhead(e.currentTarget.currentTime)}
+              onPause={() => setDialogIsPlaying(false)}
+              onPlay={() => setDialogIsPlaying(true)}
+              onLoadedMetadata={(e) => {
+                setAudioDuration(e.currentTarget.duration);
+              }}
+              className="hidden"
+            />
+
+            {/* Waveform Scrubber Area */}
+            <div className="p-5 border-b border-white/10 bg-zinc-900/30 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Interactive Waveform (Click to Seek)</span>
+                <div className="flex items-center gap-4 text-xs font-mono">
+                  <span className="text-emerald-400 font-bold">
+                    {dialogPlayhead.toFixed(2)}s
+                  </span>
+                  <span className="text-zinc-600">/</span>
+                  <span className="text-zinc-400">
+                    {audioDuration?.toFixed(2) || 0}s
+                  </span>
+                </div>
+              </div>
+
+              <div className="relative">
+                <canvas
+                  ref={dialogWaveformCanvasRef}
+                  width={900}
+                  height={110}
+                  onClick={handleDialogWaveformClick}
+                  className="w-full h-28 bg-black/60 rounded-xl border border-white/5 cursor-pointer shadow-inner transition-colors hover:border-emerald-500/30"
+                />
+              </div>
+
+              {/* Master Player Controls */}
+              <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-full border-white/10 hover:bg-white/5 text-zinc-300"
+                    onClick={() => {
+                      if (dialogAudioRef.current) {
+                        dialogAudioRef.current.currentTime = Math.max(0, dialogAudioRef.current.currentTime - 5);
+                      }
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    className="h-9 w-9 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-900/30"
+                    onClick={() => {
+                      if (dialogAudioRef.current) {
+                        if (dialogIsPlaying) {
+                          dialogAudioRef.current.pause();
+                        } else {
+                          dialogAudioRef.current.play().catch(() => {});
+                        }
+                      }
+                    }}
+                  >
+                    {dialogIsPlaying ? (
+                      <Pause className="h-4 w-4 fill-white text-white" />
+                    ) : (
+                      <Play className="h-4 w-4 fill-white text-white ml-0.5" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-full border-white/10 hover:bg-white/5 text-zinc-300"
+                    onClick={() => {
+                      if (dialogAudioRef.current && audioDuration) {
+                        dialogAudioRef.current.currentTime = Math.min(audioDuration, dialogAudioRef.current.currentTime + 5);
+                      }
+                    }}
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                {/* Auto Calibration Actions */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs border-emerald-500/20 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 hover:text-emerald-300"
+                    onClick={autoDistributeTimestamps}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Auto-Distribute Evenly
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs border-red-500/20 text-red-400 bg-red-500/5 hover:bg-red-500/10 hover:text-red-300"
+                    onClick={() => {
+                      setCustomAudioTimestamps({});
+                      toast.success("Timestamps cleared");
+                    }}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Clear All Timestamps
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Split Panel Layout for Ayahs */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-zinc-950">
+              {/* Left Column: Sync Instructions & Spacebar Trigger */}
+              <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/10 p-5 bg-zinc-900/10 space-y-4 shrink-0 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 space-y-2">
+                    <h4 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5" /> Quick Sync Tip
+                    </h4>
+                    <p className="text-[10px] text-zinc-300 leading-relaxed">
+                      Play the audio and click <strong className="text-white">"Set Start"</strong> and <strong className="text-white">"Set End"</strong> next to each slide in real-time. Shaded regions on the waveform show timestamps visually.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/5 space-y-2">
+                  <div className="text-[10px] text-zinc-500 text-center font-mono">
+                    Quran Studio Audio Calibrator v1.2
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Slide List with timings */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-3 thin-scroll bg-zinc-900/20">
+                {slides.map((s, idx) => {
+                  const ts = customAudioTimestamps[idx] || { start: 0, end: 0 };
+                  const isPlayingThis = testPlayingIdx === idx;
+                  const duration = parseFloat((ts.end - ts.start).toFixed(2));
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex flex-col gap-3 rounded-xl border p-4 transition-all duration-200 ${
+                        isPlayingThis
+                          ? "border-emerald-500 bg-emerald-950/20 shadow-md"
+                          : "border-white/5 bg-zinc-900/40 hover:border-white/15"
+                      }`}
+                    >
+                      {/* Slide Header Info */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[var(--gold)]">
+                            Slide {idx + 1}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            (Ayah {s.numberInSurah})
+                          </span>
+                          {duration > 0 && (
+                            <Badge className="bg-zinc-800 text-zinc-300 border-none text-[9px] px-1.5 py-0.5">
+                              {duration}s duration
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`h-7 px-2.5 text-[10px] rounded-lg transition-colors ${
+                            isPlayingThis
+                              ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                          }`}
+                          onClick={() => isPlayingThis ? stopTestAyah() : playSlideSegment(idx)}
+                        >
+                          {isPlayingThis ? (
+                            <>
+                              <Square className="mr-1 h-3 w-3 text-red-400 fill-red-400" /> Stop Preview
+                            </>
+                          ) : (
+                            <>
+                              <Play className="mr-1 h-3 w-3 text-emerald-400 fill-emerald-400" /> Preview Slide Audio
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      {/* Quran Verse Preview */}
+                      <p className="text-sm text-right font-medium text-white leading-relaxed font-quran select-none pr-2 border-r-2 border-emerald-500/30" dir="rtl">
+                        {s.text}
+                      </p>
+
+                      {/* Timestamps Visual Editor Controls */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 pt-2 border-t border-white/5">
+                        {/* Start Time Editor */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[10px] text-zinc-400 font-semibold">Start Time (sec)</Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 text-[9px] text-emerald-400 hover:text-white hover:bg-emerald-600/20"
+                              onClick={() => captureStart(idx)}
+                            >
+                              <Zap className="mr-1 h-2.5 w-2.5" /> Capture Playhead
+                            </Button>
+                          </div>
+                          <div className="flex gap-1 items-center">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 border-white/10 hover:bg-white/5 text-zinc-400"
+                              onClick={() => adjustTime(idx, "start", -0.1)}
+                            >
+                              -
+                            </Button>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max={audioDuration || 9999}
+                              value={ts.start}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setCustomAudioTimestamps(prev => ({
+                                  ...prev,
+                                  [idx]: { ...ts, start: val }
+                                }));
+                              }}
+                              className="h-7 text-xs font-mono text-center bg-zinc-950 border-white/10 text-white"
+                            />
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 border-white/10 hover:bg-white/5 text-zinc-400"
+                              onClick={() => adjustTime(idx, "start", 0.1)}
+                            >
+                              +
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* End Time Editor */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[10px] text-zinc-400 font-semibold">End Time (sec)</Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 text-[9px] text-emerald-400 hover:text-white hover:bg-emerald-600/20"
+                              onClick={() => captureEnd(idx)}
+                            >
+                              <Zap className="mr-1 h-2.5 w-2.5" /> Capture Playhead
+                            </Button>
+                          </div>
+                          <div className="flex gap-1 items-center">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 border-white/10 hover:bg-white/5 text-zinc-400"
+                              onClick={() => adjustTime(idx, "end", -0.1)}
+                            >
+                              -
+                            </Button>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max={audioDuration || 9999}
+                              value={ts.end}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setCustomAudioTimestamps(prev => ({
+                                  ...prev,
+                                  [idx]: { ...ts, end: val }
+                                }));
+                              }}
+                              className="h-7 text-xs font-mono text-center bg-zinc-950 border-white/10 text-white"
+                            />
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 border-white/10 hover:bg-white/5 text-zinc-400"
+                              onClick={() => adjustTime(idx, "end", 0.1)}
+                            >
+                              +
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-white/10 p-4 bg-zinc-900/60 flex justify-end gap-3 shrink-0">
+              <Button
+                className="bg-emerald-600 text-white hover:bg-emerald-500 h-9 text-xs px-5 rounded-lg shadow-lg shadow-emerald-900/20 font-bold"
+                onClick={() => { stopTestAyah(); setShowTimestampDialog(false); }}
+              >
+                <Check className="mr-2 h-4 w-4" /> Save & Close Editor
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Video Generation Dialog */}
       <VideoGenDialog
         open={videoDialogOpen}
@@ -2758,6 +3474,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         slides={slides}
         surahName={currentSurah?.englishName ?? "Quran"}
         customAudioUrl={customAudioUrl}
+        customAudioTimestamps={customAudioTimestamps}
         background={(() => {
           if (bgId.startsWith("v_") || bgId === "__video_upload__") {
             return {

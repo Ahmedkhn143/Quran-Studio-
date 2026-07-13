@@ -332,3 +332,26 @@ html {
 .aspect-9-16 { aspect-ratio: 9 / 16; }
 .aspect-1-1 { aspect-ratio: 1 / 1; }
 .aspect-4-5 { aspect-ratio: 4 / 5; }
+
+/* Premium Styling Extensions */
+.glass-panel {
+  background: rgba(var(--card), 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.premium-gradient-bg {
+  background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.06), transparent 50%),
+              radial-gradient(circle at bottom left, rgba(212, 160, 23, 0.04), transparent 50%);
+}
+
+.canvas-glow {
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 0 50px -10px rgba(16, 185, 129, 0.15);
+}
+
+.timeline-bar-active {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(212, 160, 23, 0.1) 100%);
+  border-color: rgba(212, 160, 23, 0.4);
+}
+

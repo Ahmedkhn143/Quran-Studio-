@@ -29,6 +29,7 @@ interface VideoGenDialogProps {
   slides: AyahData[];
   surahName: string;
   customAudioUrl?: string | null;
+  customAudioTimestamps?: Record<number, { start: number; end: number }>;
   background: BackgroundSpec;
   textColor: string;
   textShadow: string;
@@ -73,7 +74,7 @@ type GenState = "idle" | "preparing" | "rendering" | "done" | "error";
 
 export function VideoGenDialog({
   open, onClose, slides, surahName, background,
-  textColor, textShadow, textSize, showTranslation, aspectRatio, customAudioUrl,
+  textColor, textShadow, textSize, showTranslation, aspectRatio, customAudioUrl, customAudioTimestamps,
   arabicFont, translationFont,
   overlayText, overlayTextColor, overlayTextSize, overlayTextPosition,
   elements, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer, showHighlight,
@@ -130,16 +131,21 @@ export function VideoGenDialog({
     setResult(null);
 
     // Build slide data
-    const slideData: SlideData[] = slides.map((s) => ({
-      arabicWords: s.words.map((w) => ({
-        text: w.text,
-        audio: customAudioUrl ? undefined : w.audio,
-      })),
-      translation: s.translation,
-      surahName,
-      ayahNumber: s.numberInSurah,
-      audio: customAudioUrl || s.audio,
-    }));
+    const slideData: SlideData[] = slides.map((s, idx) => {
+      const ts = customAudioTimestamps?.[idx];
+      return {
+        arabicWords: s.words.map((w) => ({
+          text: w.text,
+          audio: customAudioUrl ? undefined : w.audio,
+        })),
+        translation: s.translation,
+        surahName,
+        ayahNumber: s.numberInSurah,
+        audio: customAudioUrl || s.audio,
+        audioStart: ts?.start,
+        audioEnd: ts?.end,
+      };
+    });
 
     // Calculate dimensions from aspect ratio + quality preset
     const preset = QUALITY_PRESETS.find((q) => q.id === quality) ?? QUALITY_PRESETS[0];

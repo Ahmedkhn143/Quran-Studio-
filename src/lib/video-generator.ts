@@ -78,6 +78,8 @@ export interface SlideData {
   surahName: string;
   ayahNumber: number;
   audio?: string; // full ayah audio fallback
+  audioStart?: number;
+  audioEnd?: number;
 }
 
 export interface BackgroundSpec {
@@ -843,8 +845,10 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
               const src = audioCtx.createBufferSource();
               src.buffer = buf;
               src.connect(masterGain); // route through gain → dest → recorder
-              src.start();
-              const dur = buf.duration * 1000;
+              const startSec = slide.audioStart || 0;
+              const durationSec = (slide.audioEnd && slide.audioEnd > startSec) ? (slide.audioEnd - startSec) : buf.duration;
+              src.start(0, startSec, durationSec);
+              const dur = durationSec * 1000;
               const wordCount = slide.arabicWords.length;
               const interval = dur / Math.max(wordCount, 1);
               const startMs = Date.now();
