@@ -46,7 +46,18 @@ export interface VideoGenOptions {
 
   // Custom text locations offsets
   arabicYOffset?: number;
+  arabicXOffset?: number;
   translationYOffset?: number;
+  translationXOffset?: number;
+
+  // Surah Name styling options
+  showSurah?: boolean;
+  surahFont?: string;
+  surahFontSize?: number;
+  surahColor?: string;
+  surahBgOpacity?: number; // 0 to 100
+  surahXOffset?: number;
+  surahYOffset?: number;
 
   // Callbacks
   onProgress?: (percent: number, status: string) => void;
@@ -102,6 +113,10 @@ function paintBackground(
   h: number,
   bgImage: HTMLImageElement | null
 ) {
+  if (bg.type === "video") {
+    return;
+  }
+
   // Black base
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, w, h);
@@ -336,18 +351,28 @@ export function drawSlide(
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, w, h);
 
-  // Top-right meta badge
-  ctx.font = `bold ${Math.round(h * 0.025)}px Inter, sans-serif`;
-  ctx.textAlign = "right";
-  ctx.textBaseline = "top";
-  const meta = `${slide.surahName} · ${slide.ayahNumber}`;
-  const metaPad = Math.round(h * 0.02);
-  const metaW = ctx.measureText(meta.toUpperCase()).width + metaPad * 2;
-  const metaH = Math.round(h * 0.045);
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
-  ctx.fillRect(w - metaW - metaPad, metaPad, metaW, metaH);
-  ctx.fillStyle = "#d4a017";
-  ctx.fillText(meta.toUpperCase(), w - metaPad - metaPad, metaPad + metaH / 2 - 2);
+  // Top-right meta badge (Surah name)
+  if (opts.showSurah !== false) {
+    const surahFontSize = opts.surahFontSize !== undefined ? Math.round((opts.surahFontSize / 900) * h) : Math.round(h * 0.025);
+    const surahFont = opts.surahFont || "Inter, sans-serif";
+    ctx.font = `bold ${surahFontSize}px ${surahFont}`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    const meta = `${slide.surahName} · ${slide.ayahNumber}`;
+    const metaPad = Math.round(h * 0.02);
+    const metaW = ctx.measureText(meta.toUpperCase()).width + metaPad * 2;
+    const metaH = surahFontSize + metaPad;
+    
+    // xOffsetPx shifts it to the left (from right edge)
+    const xOffsetPx = opts.surahXOffset ? (opts.surahXOffset / 100) * w : 0;
+    const yOffsetPx = opts.surahYOffset ? (opts.surahYOffset / 100) * h : 0;
+    
+    const bgOpacity = opts.surahBgOpacity !== undefined ? opts.surahBgOpacity / 100 : 0.4;
+    ctx.fillStyle = `rgba(0,0,0,${bgOpacity})`;
+    ctx.fillRect(w - metaW - metaPad - xOffsetPx, metaPad + yOffsetPx, metaW, metaH);
+    ctx.fillStyle = opts.surahColor || "#d4a017";
+    ctx.fillText(meta.toUpperCase(), w - metaPad - metaPad - xOffsetPx, metaPad + metaH / 2 - surahFontSize / 2 + yOffsetPx);
+  }
 
   // Arabic words — center
   const showArabic = opts.showArabic !== false;
@@ -396,8 +421,9 @@ export function drawSlide(
       }
       lineW += spaceW * (line.length - 1);
       
-      // Starting X at center + half width, rendering RTL (moving leftwards)
-      let x = w / 2 + lineW / 2;
+      // Starting X at center + half width + X offset, rendering RTL (moving leftwards)
+      const arabicXOffsetPx = opts.arabicXOffset ? (opts.arabicXOffset / 100) * w : 0;
+      let x = w / 2 + lineW / 2 + arabicXOffsetPx;
       for (let j = 0; j < line.length; j++) {
         const item = line[j];
         const ww = ctx.measureText(item.word).width;
@@ -461,13 +487,14 @@ export function drawSlide(
       const lw = ctx.measureText(line).width;
       if (lw > maxLineW) maxLineW = lw;
     }
+    const transXOffsetPx = opts.translationXOffset ? (opts.translationXOffset / 100) * w : 0;
     const boxW = maxLineW + padX * 2;
     ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.fillRect(w / 2 - boxW / 2, transY, boxW, boxH);
+    ctx.fillRect(w / 2 - boxW / 2 + transXOffsetPx, transY, boxW, boxH);
     // Text
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     transLines.forEach((line, i) => {
-      ctx.fillText(line, w / 2, transY + padY + i * lineH);
+      ctx.fillText(line, w / 2 + transXOffsetPx, transY + padY + i * lineH);
     });
   }
 
@@ -629,7 +656,8 @@ export interface GenResult {
  * Generate a Quran video by:
  * 1. Setting up a canvas at the target resolution
  * 2. Running a CONTINUOUS rendering loop that repaints the canvas every frame
- * 3. Playing per-word audio sequentially, updating shared render state
+ * 3. Playing full ayah recitation (continuous murattal) with word highlights synced
+ *    to audio duration — per-word clips are only used when no full ayah audio exists
  * 4. Capturing canvas stream via MediaRecorder
  * 5. Mixing in audio via Web Audio API
  * 6. Returning a downloadable Blob
@@ -827,13 +855,24 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
       recorder.start(500); // Smaller timeslice for more frequent data chunks
       onProgress?.(0, "Starting...");
 
+      // Preload full ayah audio so playback matches live preview (continuous recitation)
+      const slideAudioBuffers = await Promise.all(
+        opts.slides.map((slide) =>
+          slide.audio ? fetchAudioBuffer(slide.audio, audioCtx) : Promise.resolve(null)
+        )
+      );
+
       let totalDurationMs = 0;
-      // Pre-calculate total duration
-      for (const slide of opts.slides) {
-        if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
+      for (let i = 0; i < opts.slides.length; i++) {
+        const slide = opts.slides[i];
+        const buf = slideAudioBuffers[i];
+        if (slide.audio && buf) {
+          const startSec = slide.audioStart || 0;
+          const durationSec = (slide.audioEnd && slide.audioEnd > startSec)
+            ? (slide.audioEnd - startSec) : buf.duration;
+          totalDurationMs += durationSec * 1000;
+        } else if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
           totalDurationMs += slide.arabicWords.length * 900;
-        } else if (slide.audio) {
-          totalDurationMs += 5000;
         } else {
           totalDurationMs += 3000;
         }
@@ -851,10 +890,47 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
         const statusText = `Rendering ayah ${s + 1}/${opts.slides.length}`;
         onProgress?.(Math.round((elapsedMs / totalDurationMs) * 100), statusText);
 
-        if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
-          // ─── Word-by-word with per-word audio ─────────────────────────
+        const preloadedAyahBuf = slideAudioBuffers[s];
+
+        if (slide.audio && audioCtx && masterGain) {
+          // ─── Full ayah audio — continuous recitation + word highlights ───
+          try {
+            const ayahBuf = preloadedAyahBuf ?? await fetchAudioBuffer(slide.audio, audioCtx);
+            if (!ayahBuf) throw new Error("Ayah audio unavailable");
+
+            const src = audioCtx.createBufferSource();
+            src.buffer = ayahBuf;
+            src.connect(masterGain);
+            const startSec = slide.audioStart || 0;
+            const durationSec = (slide.audioEnd && slide.audioEnd > startSec)
+              ? (slide.audioEnd - startSec) : ayahBuf.duration;
+            src.start(0, startSec, durationSec);
+            const dur = durationSec * 1000;
+            const wordCount = slide.arabicWords.length;
+            const wordInterval = dur / Math.max(wordCount, 1);
+            const playStartMs = Date.now();
+
+            while (Date.now() - playStartMs < dur) {
+              const t = Date.now() - playStartMs;
+              const idx = Math.min(wordCount - 1, Math.floor(t / wordInterval));
+              renderState.activeWordIdx = idx;
+              renderState.slideProgress = t / dur;
+              renderState.currentTimeMs = elapsedMs + t;
+              onProgress?.(
+                Math.min(99, Math.round(((elapsedMs + t) / totalDurationMs) * 100)),
+                statusText
+              );
+              await new Promise((r) => setTimeout(r, 50));
+            }
+            elapsedMs += dur;
+          } catch {
+            renderState.activeWordIdx = -1;
+            await new Promise((r) => setTimeout(r, 3000));
+            elapsedMs += 3000;
+          }
+        } else if (slide.arabicWords.length > 0 && slide.arabicWords.every((w) => w.audio)) {
+          // ─── Fallback: per-word clips when no full ayah audio is available ───
           for (let i = 0; i < slide.arabicWords.length; i++) {
-            // Update render state — the continuous loop will pick this up
             renderState.activeWordIdx = i;
             renderState.slideProgress = i / Math.max(slide.arabicWords.length - 1, 1);
 
@@ -866,9 +942,8 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
                 src.buffer = buf;
                 src.connect(masterGain);
                 src.start();
-                // Wait for the word audio to finish + small gap
                 const dur = buf.duration * 1000;
-                const gap = 80; // Small gap between words for natural pacing
+                const gap = 80;
                 await new Promise((r) => setTimeout(r, dur + gap));
                 elapsedMs += dur + gap;
               } else {
@@ -880,48 +955,6 @@ export async function generateQuranVideo(opts: VideoGenOptions): Promise<GenResu
               elapsedMs += 400;
             }
             onProgress?.(Math.min(99, Math.round((elapsedMs / totalDurationMs) * 100)), statusText);
-          }
-        } else if (slide.audio) {
-          // ─── Full ayah audio — animate word highlights over duration ───
-          try {
-            const buf = await fetchAudioBuffer(slide.audio, audioCtx);
-            if (audioCtx && masterGain && buf) {
-              const src = audioCtx.createBufferSource();
-              src.buffer = buf;
-              src.connect(masterGain);
-              const startSec = slide.audioStart || 0;
-              const durationSec = (slide.audioEnd && slide.audioEnd > startSec)
-                ? (slide.audioEnd - startSec) : buf.duration;
-              src.start(0, startSec, durationSec);
-              const dur = durationSec * 1000;
-              const wordCount = slide.arabicWords.length;
-              const wordInterval = dur / Math.max(wordCount, 1);
-              const playStartMs = Date.now();
-
-              // Update render state in a tight loop while audio plays
-              while (Date.now() - playStartMs < dur) {
-                const t = Date.now() - playStartMs;
-                const idx = Math.min(wordCount - 1, Math.floor(t / wordInterval));
-                renderState.activeWordIdx = idx;
-                renderState.slideProgress = t / dur;
-                renderState.currentTimeMs = elapsedMs + t;
-                onProgress?.(
-                  Math.min(99, Math.round(((elapsedMs + t) / totalDurationMs) * 100)),
-                  statusText
-                );
-                // Yield to the render loop — don't monopolize the thread
-                await new Promise((r) => setTimeout(r, 50));
-              }
-              elapsedMs += dur;
-            } else {
-              renderState.activeWordIdx = -1;
-              await new Promise((r) => setTimeout(r, 3000));
-              elapsedMs += 3000;
-            }
-          } catch {
-            renderState.activeWordIdx = -1;
-            await new Promise((r) => setTimeout(r, 3000));
-            elapsedMs += 3000;
           }
         } else {
           // ─── No audio — render static for 3 seconds ───────────────────

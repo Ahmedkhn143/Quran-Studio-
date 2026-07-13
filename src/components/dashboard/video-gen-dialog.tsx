@@ -49,12 +49,21 @@ interface VideoGenDialogProps {
   showAudioVisualizer?: boolean;
   showHighlight?: boolean;
   arabicYOffset?: number;
+  arabicXOffset?: number;
   translationYOffset?: number;
+  translationXOffset?: number;
   showArabic?: boolean;
   highlightColor?: string;
   highlightGradientStart?: string;
   highlightGradientEnd?: string;
   highlightGlowColor?: string;
+  showSurah?: boolean;
+  surahFont?: string;
+  surahFontSize?: number;
+  surahColor?: string;
+  surahBgOpacity?: number;
+  surahXOffset?: number;
+  surahYOffset?: number;
 }
 
 const QUALITY_PRESETS = [
@@ -81,8 +90,9 @@ export function VideoGenDialog({
   arabicFont, translationFont,
   overlayText, overlayTextColor, overlayTextSize, overlayTextPosition,
   elements, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer, showHighlight,
-  arabicYOffset, translationYOffset,
-  showArabic, highlightColor, highlightGradientStart, highlightGradientEnd, highlightGlowColor
+  arabicYOffset, arabicXOffset, translationYOffset, translationXOffset,
+  showArabic, highlightColor, highlightGradientStart, highlightGradientEnd, highlightGlowColor,
+  showSurah, surahFont, surahFontSize, surahColor, surahBgOpacity, surahXOffset, surahYOffset
 }: VideoGenDialogProps) {
   const [quality, setQuality] = useState("720p");
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
@@ -189,12 +199,21 @@ export function VideoGenDialog({
         showAudioVisualizer,
         showHighlight,
         arabicYOffset,
+        arabicXOffset,
         translationYOffset,
+        translationXOffset,
         showArabic,
         highlightColor,
         highlightGradientStart,
         highlightGradientEnd,
-        highlightGlowColor
+        highlightGlowColor,
+        showSurah,
+        surahFont,
+        surahFontSize,
+        surahColor,
+        surahBgOpacity,
+        surahXOffset,
+        surahYOffset
       });
 
       setState("done");

@@ -6,6 +6,30 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap');
 
+@font-face {
+  font-family: 'ArabQuranIslamic140-K7n4W';
+  src: url('/fonts/uploaded-fonts/ArabQuranIslamic140-K7n4W.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ArabQuranIslamic140-vnmnZ';
+  src: url('/fonts/uploaded-fonts/ArabQuranIslamic140-vnmnZ.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Quran karim 114';
+  src: url('/fonts/uploaded-fonts/Quran karim 114.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @import "tailwindcss";
 @import "tw-animate-css";
 

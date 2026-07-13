@@ -223,7 +223,18 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
 
   // Location/position offsets
   const [arabicYOffset, setArabicYOffset] = useState<number>(0);
+  const [arabicXOffset, setArabicXOffset] = useState<number>(0);
   const [translationYOffset, setTranslationYOffset] = useState<number>(0);
+  const [translationXOffset, setTranslationXOffset] = useState<number>(0);
+
+  // Surah Name styling states
+  const [showSurah, setShowSurah] = useState<boolean>(true);
+  const [surahFont, setSurahFont] = useState<string>("Inter");
+  const [surahFontSize, setSurahFontSize] = useState<number>(24);
+  const [surahColor, setSurahColor] = useState<string>("#d4a017");
+  const [surahBgOpacity, setSurahBgOpacity] = useState<number>(40);
+  const [surahXOffset, setSurahXOffset] = useState<number>(0);
+  const [surahYOffset, setSurahYOffset] = useState<number>(0);
 
   // Canvas elements state
   const [elements, setElements] = useState<CanvasElement[]>([]);
@@ -510,12 +521,21 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       transitionEffect,
       showAudioVisualizer,
       arabicYOffset,
+      arabicXOffset,
       translationYOffset,
+      translationXOffset,
       showArabic,
       highlightColor,
       highlightGradientStart: highlightType === "gradient" ? highlightGradientStart : undefined,
       highlightGradientEnd: highlightType === "gradient" ? highlightGradientEnd : undefined,
-      highlightGlowColor
+      highlightGlowColor,
+      showSurah,
+      surahFont,
+      surahFontSize,
+      surahColor,
+      surahBgOpacity,
+      surahXOffset,
+      surahYOffset
     };
 
     const slideProgress = audioDuration ? progress / 100 : 0;
@@ -526,8 +546,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     translationFont, customOverlayText, customOverlayTextColor, customOverlayTextSize,
     customOverlayTextPosition, showHighlight, elements, activeWordIdx, redrawCount, progress,
     audioDuration, backgroundEffect, textEntranceEffect, transitionEffect, showAudioVisualizer,
-    arabicYOffset, translationYOffset, showArabic, highlightType, highlightColor, highlightGradientStart,
-    highlightGradientEnd, highlightGlowColor
+    arabicYOffset, arabicXOffset, translationYOffset, translationXOffset, showArabic, highlightType, highlightColor, highlightGradientStart,
+    highlightGradientEnd, highlightGlowColor, showSurah, surahFont, surahFontSize, surahColor, surahBgOpacity,
+    surahXOffset, surahYOffset
   ]);
 
   // History & Undo/Redo
@@ -1850,13 +1871,71 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                 }
               }}
             >
+              {/* Live Video Background Preview */}
+              {isVideoBg && (
+                <video
+                  key={bgId === "__video_upload__" ? uploadedBgUrl || "" : currentVideo?.url || ""}
+                  src={bgId === "__video_upload__" ? uploadedBgUrl || "" : currentVideo?.url || ""}
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                  className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                  style={{ opacity: bgOpacity / 100 }}
+                />
+              )}
+
               {/* WYSIWYG PREVIEW CANVAS */}
               <canvas
                 ref={canvasRef}
                 width={1280}
                 height={720}
-                className="h-full w-full object-contain bg-black"
+                className={`h-full w-full object-contain ${isVideoBg ? "bg-transparent" : "bg-black"}`}
+                style={{ position: "relative", zIndex: 10 }}
               />
+
+              {/* Draggable Overlay for Surah Name */}
+              {showSurah && (
+                <div
+                  className={`absolute cursor-move select-none flex items-center justify-center rounded border-2 border-dashed ${
+                    selectedElementId === "__surah_name_pos__"
+                      ? "border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/30"
+                      : "border-transparent hover:border-white/30"
+                  }`}
+                  style={{
+                    right: `${2 + (surahXOffset || 0)}%`,
+                    top: `${2 + (surahYOffset || 0)}%`,
+                    width: "24%",
+                    height: "9%",
+                    zIndex: 30,
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setSelectedElementId("__surah_name_pos__");
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const startXOffset = surahXOffset || 0;
+                    const startYOffset = surahYOffset || 0;
+                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                      const dx = ((moveEvent.clientX - startX) / canvasRef.current!.clientWidth) * 100;
+                      const dy = ((moveEvent.clientY - startY) / canvasRef.current!.clientHeight) * 100;
+                      // Moving mouse left (negative dx) should increase the right-anchored offset (shift leftwards)
+                      setSurahXOffset(Math.max(-100, Math.min(100, Math.round(startXOffset - dx))));
+                      setSurahYOffset(Math.max(-100, Math.min(100, Math.round(startYOffset + dy))));
+                    };
+                    const handleMouseUp = () => {
+                      window.removeEventListener("mousemove", handleMouseMove);
+                      window.removeEventListener("mouseup", handleMouseUp);
+                    };
+                    window.addEventListener("mousemove", handleMouseMove);
+                    window.addEventListener("mouseup", handleMouseUp);
+                  }}
+                >
+                  {selectedElementId === "__surah_name_pos__" && (
+                    <span className="text-[10px] text-white bg-black/60 px-1 rounded absolute top-1 left-1">Surah Name Position</span>
+                  )}
+                </div>
+              )}
 
               {/* Elements Interactive Overlay Layer */}
               {/* Draggable Overlay for Arabic Verse */}
@@ -1867,7 +1946,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     : "border-transparent hover:border-white/30"
                 }`}
                 style={{
-                  left: "10%",
+                  left: `${10 + (arabicXOffset || 0)}%`,
                   width: "80%",
                   top: `${50 + (arabicYOffset || 0) - 15}%`,
                   height: "30%",
@@ -1876,12 +1955,17 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   setSelectedElementId("__arabic_verse_pos__");
+                  const startX = e.clientX;
                   const startY = e.clientY;
-                  const startOffset = arabicYOffset || 0;
+                  const startXOffset = arabicXOffset || 0;
+                  const startYOffset = arabicYOffset || 0;
                   const handleMouseMove = (moveEvent: MouseEvent) => {
+                    const dx = ((moveEvent.clientX - startX) / canvasRef.current!.clientWidth) * 100;
                     const dy = ((moveEvent.clientY - startY) / canvasRef.current!.clientHeight) * 100;
-                    const newOffset = Math.max(-50, Math.min(50, Math.round(startOffset + dy)));
-                    setArabicYOffset(newOffset);
+                    const newXOffset = Math.max(-100, Math.min(100, Math.round(startXOffset + dx)));
+                    const newYOffset = Math.max(-50, Math.min(50, Math.round(startYOffset + dy)));
+                    setArabicXOffset(newXOffset);
+                    setArabicYOffset(newYOffset);
                   };
                   const handleMouseUp = () => {
                     window.removeEventListener("mousemove", handleMouseMove);
@@ -1905,7 +1989,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       : "border-transparent hover:border-white/30"
                   }`}
                   style={{
-                    left: "15%",
+                    left: `${15 + (translationXOffset || 0)}%`,
                     width: "70%",
                     top: `${50 + (arabicYOffset || 0) + 15 + (translationYOffset || 0) - 8}%`,
                     height: "16%",
@@ -1914,12 +1998,17 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     setSelectedElementId("__translation_pos__");
+                    const startX = e.clientX;
                     const startY = e.clientY;
-                    const startOffset = translationYOffset || 0;
+                    const startXOffset = translationXOffset || 0;
+                    const startYOffset = translationYOffset || 0;
                     const handleMouseMove = (moveEvent: MouseEvent) => {
+                      const dx = ((moveEvent.clientX - startX) / canvasRef.current!.clientWidth) * 100;
                       const dy = ((moveEvent.clientY - startY) / canvasRef.current!.clientHeight) * 100;
-                      const newOffset = Math.max(-50, Math.min(50, Math.round(startOffset + dy)));
-                      setTranslationYOffset(newOffset);
+                      const newXOffset = Math.max(-100, Math.min(100, Math.round(startXOffset + dx)));
+                      const newYOffset = Math.max(-50, Math.min(50, Math.round(startYOffset + dy)));
+                      setTranslationXOffset(newXOffset);
+                      setTranslationYOffset(newYOffset);
                     };
                     const handleMouseUp = () => {
                       window.removeEventListener("mousemove", handleMouseMove);
@@ -2548,6 +2637,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     value={arabicFont}
                     onValueChange={setArabicFont}
                     options={[
+                      "Quran karim 114",
+                      "ArabQuranIslamic140-K7n4W",
+                      "ArabQuranIslamic140-vnmnZ",
                       "KFGQPC Uthmanic Script Hafs",
                       "Amiri Quran",
                       "Scheherazade",
@@ -2683,13 +2775,45 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     <div className="border-t border-border pt-2 mt-2 space-y-2">
                       <p className="text-[10px] font-semibold text-muted-foreground">Selected Element Options</p>
                       {elements.find(e => e.id === selectedElementId)?.type === "text" && (
-                        <div>
-                          <Label className="text-[10px] mb-1 block">Content</Label>
-                          <Input
-                            className="h-7 text-xs"
-                            value={elements.find(e => e.id === selectedElementId)?.content || ""}
-                            onChange={(e) => updateElement(selectedElementId, { content: e.target.value })}
-                          />
+                        <div className="space-y-2">
+                          <div>
+                            <Label className="text-[10px] mb-1 block">Content</Label>
+                            <Input
+                              className="h-7 text-xs"
+                              value={elements.find(e => e.id === selectedElementId)?.content || ""}
+                              onChange={(e) => updateElement(selectedElementId, { content: e.target.value })}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Font Size ({elements.find(e => e.id === selectedElementId)?.fontSize || 24}px)</Label>
+                              <Slider
+                                value={[elements.find(e => e.id === selectedElementId)?.fontSize || 24]}
+                                onValueChange={(v) => updateElement(selectedElementId, { fontSize: v[0] })}
+                                min={12}
+                                max={120}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] mb-1 block">Font Family</Label>
+                              <SimpleSelect
+                                value={elements.find(e => e.id === selectedElementId)?.fontFamily || "Inter"}
+                                onValueChange={(v) => updateElement(selectedElementId, { fontFamily: v })}
+                                options={[
+                                  { value: "Inter", label: "Inter" },
+                                  { value: "Cairo", label: "Cairo" },
+                                  { value: "Amiri", label: "Amiri" },
+                                  { value: "Noto Nastaliq Urdu", label: "Urdu (Nastaliq)" },
+                                  { value: "Scheherazade New", label: "Arabic (Scheherazade)" },
+                                  { value: "Roboto", label: "Roboto" },
+                                  { value: "Playfair Display", label: "Playfair Display" },
+                                  { value: "Montserrat", label: "Montserrat" },
+                                  { value: "Poppins", label: "Poppins" }
+                                ]}
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-2">
@@ -2752,28 +2876,145 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
 
-                {/* Vertical Position offsets controls */}
+                {/* Surah Name Style Options */}
                 <div className="rounded-lg border border-border p-3 space-y-3">
-                  <p className="text-xs font-bold text-foreground">Vertical Position Offsets</p>
-                  <div>
-                    <Label className="mb-1 block text-[10px] text-muted-foreground">Arabic Y Location Offset ({arabicYOffset}%)</Label>
-                    <Slider
-                      value={[arabicYOffset]}
-                      onValueChange={(v) => setArabicYOffset(v[0])}
-                      min={-50}
-                      max={50}
-                      step={1}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-foreground">Surah Name Style</p>
+                    <Switch
+                      checked={showSurah}
+                      onCheckedChange={setShowSurah}
                     />
                   </div>
-                  <div>
-                    <Label className="mb-1 block text-[10px] text-muted-foreground">Translation Y Location Offset ({translationYOffset}%)</Label>
-                    <Slider
-                      value={[translationYOffset]}
-                      onValueChange={(v) => setTranslationYOffset(v[0])}
-                      min={-50}
-                      max={50}
-                      step={1}
-                    />
+
+                  {showSurah && (
+                    <div className="space-y-2.5">
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Surah Font Family</Label>
+                        <SimpleSelect
+                          value={surahFont}
+                          onValueChange={setSurahFont}
+                          options={[
+                            { value: "Quran karim 114", label: "Quran karim 114 (Quranic WOFF)" },
+                            { value: "ArabQuranIslamic140-K7n4W", label: "ArabQuranIslamic140-K7n4W (Quranic)" },
+                            { value: "ArabQuranIslamic140-vnmnZ", label: "ArabQuranIslamic140-vnmnZ (Quranic)" },
+                            { value: "Inter", label: "Inter" },
+                            { value: "Cairo", label: "Cairo" },
+                            { value: "Amiri", label: "Amiri" },
+                            { value: "Scheherazade New", label: "Scheherazade New" },
+                            { value: "Roboto", label: "Roboto" },
+                            { value: "Montserrat", label: "Montserrat" }
+                          ]}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Font Size ({surahFontSize}px)</Label>
+                          <Slider
+                            value={[surahFontSize]}
+                            onValueChange={(v) => setSurahFontSize(v[0])}
+                            min={10}
+                            max={60}
+                            step={1}
+                          />
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Color</Label>
+                          <input
+                            type="color"
+                            className="h-7 w-full rounded cursor-pointer"
+                            value={surahColor}
+                            onChange={(e) => setSurahColor(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Badge Background Opacity ({surahBgOpacity}%)</Label>
+                        <Slider
+                          value={[surahBgOpacity]}
+                          onValueChange={(v) => setSurahBgOpacity(v[0])}
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">X Offset ({surahXOffset}%)</Label>
+                          <Slider
+                            value={[surahXOffset]}
+                            onValueChange={(v) => setSurahXOffset(v[0])}
+                            min={-100}
+                            max={100}
+                            step={1}
+                          />
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-[10px] text-muted-foreground">Y Offset ({surahYOffset}%)</Label>
+                          <Slider
+                            value={[surahYOffset]}
+                            onValueChange={(v) => setSurahYOffset(v[0])}
+                            min={-100}
+                            max={100}
+                            step={1}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Text Position Offsets */}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-xs font-bold text-foreground">Text Position Offsets</p>
+                  <div className="space-y-2 border-b border-border/50 pb-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground">Arabic Verse Position</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">X Offset ({arabicXOffset}%)</Label>
+                        <Slider
+                          value={[arabicXOffset]}
+                          onValueChange={(v) => setArabicXOffset(v[0])}
+                          min={-100}
+                          max={100}
+                          step={1}
+                        />
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Y Offset ({arabicYOffset}%)</Label>
+                        <Slider
+                          value={[arabicYOffset]}
+                          onValueChange={(v) => setArabicYOffset(v[0])}
+                          min={-50}
+                          max={50}
+                          step={1}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground">Translation Position</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">X Offset ({translationXOffset}%)</Label>
+                        <Slider
+                          value={[translationXOffset]}
+                          onValueChange={(v) => setTranslationXOffset(v[0])}
+                          min={-100}
+                          max={100}
+                          step={1}
+                        />
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Y Offset ({translationYOffset}%)</Label>
+                        <Slider
+                          value={[translationYOffset]}
+                          onValueChange={(v) => setTranslationYOffset(v[0])}
+                          min={-50}
+                          max={50}
+                          step={1}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -3641,12 +3882,21 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         showAudioVisualizer={showAudioVisualizer}
         showHighlight={showHighlight}
         arabicYOffset={arabicYOffset}
+        arabicXOffset={arabicXOffset}
         translationYOffset={translationYOffset}
+        translationXOffset={translationXOffset}
         showArabic={showArabic}
         highlightColor={highlightColor}
         highlightGradientStart={highlightType === "gradient" ? highlightGradientStart : undefined}
         highlightGradientEnd={highlightType === "gradient" ? highlightGradientEnd : undefined}
         highlightGlowColor={highlightGlowColor}
+        showSurah={showSurah}
+        surahFont={surahFont}
+        surahFontSize={surahFontSize}
+        surahColor={surahColor}
+        surahBgOpacity={surahBgOpacity}
+        surahXOffset={surahXOffset}
+        surahYOffset={surahYOffset}
       />
     </motion.div>
   );
