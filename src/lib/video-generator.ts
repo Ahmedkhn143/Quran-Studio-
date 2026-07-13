@@ -93,6 +93,10 @@ export interface CanvasElement {
   shadowOffsetX?: number;
   shadowOffsetY?: number;
   backgroundColor?: string;
+  letterSpacing?: number;
+  bgPaddingX?: number;
+  bgPaddingY?: number;
+  bgRadius?: number;
 }
 
 export interface SlideData {
@@ -555,13 +559,22 @@ export function drawSlide(
         ctx.textAlign = el.textAlign || "center";
         ctx.textBaseline = "middle";
         
+        if (el.letterSpacing !== undefined) {
+          ctx.letterSpacing = `${el.letterSpacing}px`;
+        } else {
+          ctx.letterSpacing = "0px";
+        }
+        
         // Text background box
         if (el.backgroundColor) {
           const textWidth = ctx.measureText(el.content).width;
-          const paddingX = 10;
-          const paddingY = 6;
+          const paddingX = el.bgPaddingX !== undefined ? el.bgPaddingX : 10;
+          const paddingY = el.bgPaddingY !== undefined ? el.bgPaddingY : 6;
+          const radius = el.bgRadius !== undefined ? el.bgRadius : 4;
           ctx.fillStyle = el.backgroundColor;
-          ctx.fillRect(-textWidth / 2 - paddingX, -fSize / 2 - paddingY, textWidth + paddingX * 2, fSize + paddingY * 2);
+          ctx.beginPath();
+          ctx.roundRect(-textWidth / 2 - paddingX, -fSize / 2 - paddingY, textWidth + paddingX * 2, fSize + paddingY * 2, radius);
+          ctx.fill();
         }
         
         // Text shadow

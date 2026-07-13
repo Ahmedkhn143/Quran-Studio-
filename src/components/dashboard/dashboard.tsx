@@ -199,6 +199,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [customGradientAngle, setCustomGradientAngle] = useState(135);
 
   // --- Text style ---
+  const [textOptTab, setTextOptTab] = useState<"style" | "stroke" | "shadow" | "bg" | "spacing">("style");
   const [textSize, setTextSize] = useState("lg");
   const [arabicTextSize, setArabicTextSize] = useState(48);
   const [translationTextSize, setTranslationTextSize] = useState(24);
@@ -241,6 +242,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [history, setHistory] = useState<CanvasElement[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [customRemoveColor, setCustomRemoveColor] = useState("#ffffff");
+  const [useCustomRemoveColor, setUseCustomRemoveColor] = useState(false);
+  const [elementBgTolerance, setElementBgTolerance] = useState(30);
 
   // Bismillah prepend
   const [prependBismillah, setPrependBismillah] = useState(false);
@@ -642,7 +646,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     if (!el || !el.imageUrl) return;
     try {
       toast.info("Removing background from element...");
-      const res = await autoRemoveBackground(el.imageUrl, bgRemoverTolerance);
+      let keyColor: any = undefined;
+      if (useCustomRemoveColor) {
+        const hex = customRemoveColor.replace("#", "");
+        const r = parseInt(hex.substring(0, 2), 16) || 0;
+        const g = parseInt(hex.substring(2, 4), 16) || 0;
+        const b = parseInt(hex.substring(4, 6), 16) || 0;
+        keyColor = { r, g, b, a: 255 };
+      }
+      const res = await autoRemoveBackground(el.imageUrl, elementBgTolerance, keyColor);
       updateElement(id, { imageUrl: res.url });
       toast.success("Element background removed!");
       pushHistory();
@@ -2809,182 +2821,311 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                   {selectedElementId && (
                     <div className="border-t border-border pt-2 mt-2 space-y-2">
                       <p className="text-[10px] font-semibold text-muted-foreground">Selected Element Options</p>
-                      {elements.find(e => e.id === selectedElementId)?.type === "text" && (
-                        <div className="space-y-2 border-b border-border pb-2 mb-2">
-                          <div>
-                            <Label className="text-[10px] mb-1 block">Content</Label>
-                            <Input
-                              className="h-7 text-xs"
-                              value={elements.find(e => e.id === selectedElementId)?.content || ""}
-                              onChange={(e) => updateElement(selectedElementId, { content: e.target.value })}
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
+                      {elements.find(e => e.id === selectedElementId)?.type === "text" && (() => {
+                        const activeEl = elements.find(e => e.id === selectedElementId)!;
+                        return (
+                          <div className="space-y-3 border-b border-border pb-3 mb-2">
+                            {/* Text Input Content */}
                             <div>
-                              <Label className="text-[10px] mb-1 block">Font Size ({elements.find(e => e.id === selectedElementId)?.fontSize || 24}px)</Label>
-                              <Slider
-                                value={[elements.find(e => e.id === selectedElementId)?.fontSize || 24]}
-                                onValueChange={(v) => updateElement(selectedElementId, { fontSize: v[0] })}
-                                min={12}
-                                max={120}
-                                step={1}
+                              <Label className="text-[10px] font-semibold mb-1 block text-foreground">Text Content</Label>
+                              <Input
+                                className="h-7 text-xs bg-zinc-950 border-white/10"
+                                value={activeEl.content || ""}
+                                onChange={(e) => updateElement(selectedElementId, { content: e.target.value })}
                               />
                             </div>
-                            <div>
-                              <Label className="text-[10px] mb-1 block">Font Family</Label>
-                              <SimpleSelect
-                                value={elements.find(e => e.id === selectedElementId)?.fontFamily || "Inter"}
-                                onValueChange={(v) => updateElement(selectedElementId, { fontFamily: v })}
-                                options={[
-                                  { value: "Quran karim 114", label: "Quran karim 114 (Quranic)" },
-                                  { value: "ArabQuranIslamic140-K7n4W", label: "ArabQuranIslamic140-K7n4W" },
-                                  { value: "ArabQuranIslamic140-vnmnZ", label: "ArabQuranIslamic140-vnmnZ" },
-                                  { value: "Noto Sans Arabic", label: "Noto Sans Arabic" },
-                                  { value: "Mirza", label: "Mirza" },
-                                  { value: "Marhey", label: "Marhey" },
-                                  { value: "Vibes", label: "Vibes" },
-                                  { value: "Baloo Bhaijaan 2", label: "Baloo Bhaijaan" },
-                                  { value: "Inter", label: "Inter" },
-                                  { value: "Cairo", label: "Cairo" },
-                                  { value: "Amiri", label: "Amiri" },
-                                  { value: "Noto Nastaliq Urdu", label: "Urdu (Nastaliq)" },
-                                  { value: "Scheherazade New", label: "Arabic (Scheherazade)" },
-                                  { value: "Roboto", label: "Roboto" },
-                                  { value: "Playfair Display", label: "Playfair Display" },
-                                  { value: "Montserrat", label: "Montserrat" },
-                                  { value: "Poppins", label: "Poppins" }
-                                ]}
-                              />
-                            </div>
-                          </div>
-                          
-                          {/* Stylings Row */}
-                          <div className="grid grid-cols-3 gap-1.5 pt-1">
-                            <Button
-                              variant={elements.find(e => e.id === selectedElementId)?.fontWeight === "bold" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-[9px] font-bold"
-                              onClick={() => {
-                                const current = elements.find(e => e.id === selectedElementId)?.fontWeight;
-                                updateElement(selectedElementId, { fontWeight: current === "bold" ? "normal" : "bold" });
-                              }}
-                            >
-                              Bold
-                            </Button>
-                            <Button
-                              variant={elements.find(e => e.id === selectedElementId)?.fontStyle === "italic" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-[9px] italic"
-                              onClick={() => {
-                                const current = elements.find(e => e.id === selectedElementId)?.fontStyle;
-                                updateElement(selectedElementId, { fontStyle: current === "italic" ? "normal" : "italic" });
-                              }}
-                            >
-                              Italic
-                            </Button>
-                            <SimpleSelect
-                              value={elements.find(e => e.id === selectedElementId)?.textAlign || "center"}
-                              onValueChange={(v) => updateElement(selectedElementId, { textAlign: v as any })}
-                              options={[
-                                { value: "left", label: "Left" },
-                                { value: "center", label: "Center" },
-                                { value: "right", label: "Right" }
-                              ]}
-                            />
-                          </div>
 
-                          {/* Stroke & Stroke Color */}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            {/* PRESET TEMPLATES GRID */}
                             <div>
-                              <Label className="text-[10px] mb-1 block">Stroke Width ({elements.find(e => e.id === selectedElementId)?.strokeWidth || 0}px)</Label>
-                              <Slider
-                                value={[elements.find(e => e.id === selectedElementId)?.strokeWidth || 0]}
-                                onValueChange={(v) => updateElement(selectedElementId, { strokeWidth: v[0] })}
-                                min={0}
-                                max={10}
-                                step={1}
-                              />
+                              <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1.5">Preset Styles (Templates)</p>
+                              <div className="grid grid-cols-3 gap-1">
+                                {[
+                                  { name: "Default", style: { color: "#ffffff", strokeWidth: 0, shadowColor: undefined, backgroundColor: undefined, fontWeight: "normal", fontStyle: "normal" } },
+                                  { name: "Black Badge", style: { color: "#ffffff", strokeWidth: 0, shadowColor: undefined, backgroundColor: "rgba(0,0,0,0.7)", bgPaddingX: 12, bgPaddingY: 6, bgRadius: 6, fontWeight: "bold" } },
+                                  { name: "Neon Glow", style: { color: "#ffe066", strokeWidth: 0, shadowColor: "rgba(255,224,102,0.9)", shadowBlur: 16, shadowOffsetX: 0, shadowOffsetY: 0, fontWeight: "bold" } },
+                                  { name: "Retro", style: { color: "#ef4444", strokeColor: "#ffffff", strokeWidth: 3, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 4, shadowOffsetY: 4, fontWeight: "bold" } },
+                                  { name: "Glass", style: { color: "#ffffff", strokeColor: "rgba(255,255,255,0.3)", strokeWidth: 1.5, backgroundColor: "rgba(255,255,255,0.15)", bgPaddingX: 14, bgPaddingY: 8, bgRadius: 8, shadowColor: "rgba(0,0,0,0.15)", shadowBlur: 8 } },
+                                  { name: "Royal Gold", style: { color: "#d4a017", strokeColor: "#000000", strokeWidth: 2, shadowColor: "rgba(0,0,0,0.6)", shadowBlur: 6, shadowOffsetX: 2, shadowOffsetY: 2, fontWeight: "bold" } }
+                                ].map((preset, idx) => (
+                                  <Button
+                                    key={idx}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[9px] px-1 hover:bg-emerald-950/20 hover:border-emerald-500 transition-all font-medium truncate"
+                                    onClick={() => updateElement(selectedElementId, preset.style)}
+                                  >
+                                    {preset.name}
+                                  </Button>
+                                ))}
+                              </div>
                             </div>
-                            <div>
-                              <Label className="text-[10px] mb-1 block">Stroke Color</Label>
-                              <input
-                                type="color"
-                                className="h-6 w-full rounded cursor-pointer"
-                                value={elements.find(e => e.id === selectedElementId)?.strokeColor || "#000000"}
-                                onChange={(e) => updateElement(selectedElementId, { strokeColor: e.target.value })}
-                              />
-                            </div>
-                          </div>
 
-                          {/* Shadow Color & Shadow Blur */}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            <div>
-                              <Label className="text-[10px] mb-1 block">Shadow Blur ({elements.find(e => e.id === selectedElementId)?.shadowBlur || 0}px)</Label>
-                              <Slider
-                                value={[elements.find(e => e.id === selectedElementId)?.shadowBlur || 0]}
-                                onValueChange={(v) => updateElement(selectedElementId, { shadowBlur: v[0] })}
-                                min={0}
-                                max={25}
-                                step={1}
-                              />
+                            {/* PREMIUM STYLE CATEGORY TABS */}
+                            <div className="flex border-b border-border text-[10px] select-none pt-1">
+                              {(["style", "stroke", "shadow", "bg", "spacing"] as const).map((tab) => (
+                                <button
+                                  key={tab}
+                                  type="button"
+                                  onClick={() => setTextOptTab(tab)}
+                                  className={`flex-1 py-1 text-center font-bold border-b-2 capitalize transition-all ${
+                                    textOptTab === tab
+                                      ? "border-emerald-500 text-emerald-400"
+                                      : "border-transparent text-muted-foreground hover:text-foreground"
+                                  }`}
+                                >
+                                  {tab === "bg" ? "Background" : tab}
+                                </button>
+                              ))}
                             </div>
-                            <div>
-                              <Label className="text-[10px] mb-1 block">Shadow Color</Label>
-                              <input
-                                type="color"
-                                className="h-6 w-full rounded cursor-pointer"
-                                value={elements.find(e => e.id === selectedElementId)?.shadowColor || "#000000"}
-                                onChange={(e) => updateElement(selectedElementId, { shadowColor: e.target.value })}
-                              />
-                            </div>
-                          </div>
 
-                          {/* Shadow Offsets */}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            <div>
-                              <Label className="text-[10px] mb-1 block">Shadow X ({elements.find(e => e.id === selectedElementId)?.shadowOffsetX || 0}px)</Label>
-                              <Slider
-                                value={[elements.find(e => e.id === selectedElementId)?.shadowOffsetX || 0]}
-                                onValueChange={(v) => updateElement(selectedElementId, { shadowOffsetX: v[0] })}
-                                min={-20}
-                                max={20}
-                                step={1}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-[10px] mb-1 block">Shadow Y ({elements.find(e => e.id === selectedElementId)?.shadowOffsetY || 0}px)</Label>
-                              <Slider
-                                value={[elements.find(e => e.id === selectedElementId)?.shadowOffsetY || 0]}
-                                onValueChange={(v) => updateElement(selectedElementId, { shadowOffsetY: v[0] })}
-                                min={-20}
-                                max={20}
-                                step={1}
-                              />
-                            </div>
-                          </div>
+                            {/* TAB CONTENTS */}
+                            <div className="pt-1.5 space-y-2.5">
+                              {/* 1. STYLE TAB */}
+                              {textOptTab === "style" && (
+                                <div className="space-y-2.5">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Font Size ({activeEl.fontSize || 24}px)</Label>
+                                      <Slider
+                                        value={[activeEl.fontSize || 24]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { fontSize: v[0] })}
+                                        min={12}
+                                        max={120}
+                                        step={1}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Font Family</Label>
+                                      <SimpleSelect
+                                        value={activeEl.fontFamily || "Inter"}
+                                        onValueChange={(v) => updateElement(selectedElementId, { fontFamily: v })}
+                                        options={[
+                                          { value: "Quran karim 114", label: "Quran karim 114 (Quranic)" },
+                                          { value: "ArabQuranIslamic140-K7n4W", label: "ArabQuranIslamic140-K7n4W" },
+                                          { value: "ArabQuranIslamic140-vnmnZ", label: "ArabQuranIslamic140-vnmnZ" },
+                                          { value: "Noto Sans Arabic", label: "Noto Sans Arabic" },
+                                          { value: "Mirza", label: "Mirza" },
+                                          { value: "Marhey", label: "Marhey" },
+                                          { value: "Vibes", label: "Vibes" },
+                                          { value: "Baloo Bhaijaan 2", label: "Baloo Bhaijaan" },
+                                          { value: "Inter", label: "Inter" },
+                                          { value: "Cairo", label: "Cairo" },
+                                          { value: "Amiri", label: "Amiri" },
+                                          { value: "Noto Nastaliq Urdu", label: "Urdu (Nastaliq)" },
+                                          { value: "Scheherazade New", label: "Arabic (Scheherazade)" },
+                                          { value: "Roboto", label: "Roboto" },
+                                          { value: "Playfair Display", label: "Playfair Display" },
+                                          { value: "Montserrat", label: "Montserrat" },
+                                          { value: "Poppins", label: "Poppins" }
+                                        ]}
+                                      />
+                                    </div>
+                                  </div>
 
-                          {/* Text Highlight / Background Box */}
-                          <div className="pt-1">
-                            <Label className="text-[10px] mb-1 block">Background Box Color</Label>
-                            <div className="flex gap-2 items-center">
-                              <input
-                                type="color"
-                                className="h-6 w-full rounded cursor-pointer"
-                                value={elements.find(e => e.id === selectedElementId)?.backgroundColor || "#000000"}
-                                onChange={(e) => updateElement(selectedElementId, { backgroundColor: e.target.value })}
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[9px]"
-                                onClick={() => updateElement(selectedElementId, { backgroundColor: undefined })}
-                              >
-                                Clear Box
-                              </Button>
+                                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                    <Button
+                                      variant={activeEl.fontWeight === "bold" ? "default" : "outline"}
+                                      size="sm"
+                                      className="h-7 text-[10px] font-bold"
+                                      onClick={() => updateElement(selectedElementId, { fontWeight: activeEl.fontWeight === "bold" ? "normal" : "bold" })}
+                                    >
+                                      Bold
+                                    </Button>
+                                    <Button
+                                      variant={activeEl.fontStyle === "italic" ? "default" : "outline"}
+                                      size="sm"
+                                      className="h-7 text-[10px] italic"
+                                      onClick={() => updateElement(selectedElementId, { fontStyle: activeEl.fontStyle === "italic" ? "normal" : "italic" })}
+                                    >
+                                      Italic
+                                    </Button>
+                                    <SimpleSelect
+                                      value={activeEl.textAlign || "center"}
+                                      onValueChange={(v) => updateElement(selectedElementId, { textAlign: v as any })}
+                                      options={[
+                                        { value: "left", label: "Align Left" },
+                                        { value: "center", label: "Align Center" },
+                                        { value: "right", label: "Align Right" }
+                                      ]}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 2. STROKE TAB */}
+                              {textOptTab === "stroke" && (
+                                <div className="space-y-2.5">
+                                  <div>
+                                    <Label className="text-[10px] mb-1 block text-muted-foreground">Stroke Thickness ({activeEl.strokeWidth || 0}px)</Label>
+                                    <Slider
+                                      value={[activeEl.strokeWidth || 0]}
+                                      onValueChange={(v) => updateElement(selectedElementId, { strokeWidth: v[0] })}
+                                      min={0}
+                                      max={15}
+                                      step={0.5}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] mb-1 block text-muted-foreground">Stroke Color</Label>
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="color"
+                                        className="h-7 w-full rounded cursor-pointer border border-white/10"
+                                        value={activeEl.strokeColor || "#000000"}
+                                        onChange={(e) => updateElement(selectedElementId, { strokeColor: e.target.value })}
+                                      />
+                                      {activeEl.strokeWidth ? (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 text-[9px]"
+                                          onClick={() => updateElement(selectedElementId, { strokeWidth: 0 })}
+                                        >
+                                          Remove
+                                        </Button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 3. SHADOW TAB */}
+                              {textOptTab === "shadow" && (
+                                <div className="space-y-2.5">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Blur Radius ({activeEl.shadowBlur || 0}px)</Label>
+                                      <Slider
+                                        value={[activeEl.shadowBlur || 0]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { shadowBlur: v[0] })}
+                                        min={0}
+                                        max={30}
+                                        step={1}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Shadow Color</Label>
+                                      <input
+                                        type="color"
+                                        className="h-6 w-full rounded cursor-pointer border border-white/10"
+                                        value={activeEl.shadowColor || "#000000"}
+                                        onChange={(e) => updateElement(selectedElementId, { shadowColor: e.target.value })}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Offset X ({activeEl.shadowOffsetX || 0}px)</Label>
+                                      <Slider
+                                        value={[activeEl.shadowOffsetX || 0]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { shadowOffsetX: v[0] })}
+                                        min={-25}
+                                        max={25}
+                                        step={1}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Offset Y ({activeEl.shadowOffsetY || 0}px)</Label>
+                                      <Slider
+                                        value={[activeEl.shadowOffsetY || 0]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { shadowOffsetY: v[0] })}
+                                        min={-25}
+                                        max={25}
+                                        step={1}
+                                      />
+                                    </div>
+                                  </div>
+                                  {activeEl.shadowColor && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 w-full text-[9px] mt-1"
+                                      onClick={() => updateElement(selectedElementId, { shadowColor: undefined, shadowBlur: 0 })}
+                                    >
+                                      Remove Shadow
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* 4. BACKGROUND TAB */}
+                              {textOptTab === "bg" && (
+                                <div className="space-y-2.5">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Padding X ({activeEl.bgPaddingX ?? 10}px)</Label>
+                                      <Slider
+                                        value={[activeEl.bgPaddingX ?? 10]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { bgPaddingX: v[0] })}
+                                        min={0}
+                                        max={40}
+                                        step={1}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Padding Y ({activeEl.bgPaddingY ?? 6}px)</Label>
+                                      <Slider
+                                        value={[activeEl.bgPaddingY ?? 6]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { bgPaddingY: v[0] })}
+                                        min={0}
+                                        max={30}
+                                        step={1}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Corner Radius ({activeEl.bgRadius ?? 4}px)</Label>
+                                      <Slider
+                                        value={[activeEl.bgRadius ?? 4]}
+                                        onValueChange={(v) => updateElement(selectedElementId, { bgRadius: v[0] })}
+                                        min={0}
+                                        max={30}
+                                        step={1}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] mb-1 block text-muted-foreground">Box Color</Label>
+                                      <input
+                                        type="color"
+                                        className="h-6 w-full rounded cursor-pointer border border-white/10"
+                                        value={activeEl.backgroundColor || "#000000"}
+                                        onChange={(e) => updateElement(selectedElementId, { backgroundColor: e.target.value })}
+                                      />
+                                    </div>
+                                  </div>
+                                  {activeEl.backgroundColor && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 w-full text-[9px] mt-1"
+                                      onClick={() => updateElement(selectedElementId, { backgroundColor: undefined })}
+                                    >
+                                      Remove Background Box
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* 5. SPACING TAB */}
+                              {textOptTab === "spacing" && (
+                                <div className="space-y-2.5">
+                                  <div>
+                                    <Label className="text-[10px] mb-1 block text-muted-foreground">Letter Spacing ({activeEl.letterSpacing || 0}px)</Label>
+                                    <Slider
+                                      value={[activeEl.letterSpacing || 0]}
+                                      onValueChange={(v) => updateElement(selectedElementId, { letterSpacing: v[0] })}
+                                      min={-10}
+                                      max={30}
+                                      step={0.5}
+                                    />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <Label className="text-[10px] mb-1 block">Color</Label>
@@ -3005,11 +3146,43 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                         </div>
                       </div>
                       {elements.find(e => e.id === selectedElementId)?.type === "image" && (
-                        <div className="pt-2 border-t border-border mt-2 space-y-2">
-                          <p className="text-[10px] font-semibold text-muted-foreground">Logo / Overlay Image Actions</p>
+                        <div className="pt-2 border-t border-border mt-2 space-y-2.5">
+                          <p className="text-[10px] font-bold text-foreground uppercase tracking-wider">Logo Background Removal</p>
+                          
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground mb-1 block">Color Tolerance ({elementBgTolerance})</Label>
+                            <Slider
+                              value={[elementBgTolerance]}
+                              onValueChange={(v) => setElementBgTolerance(v[0])}
+                              min={5}
+                              max={100}
+                              step={1}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[10px] text-muted-foreground font-medium">Remove Specific Color</span>
+                            <Switch
+                              checked={useCustomRemoveColor}
+                              onCheckedChange={setUseCustomRemoveColor}
+                            />
+                          </div>
+
+                          {useCustomRemoveColor && (
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground mb-1 block">Pick Color to Erase</Label>
+                              <input
+                                type="color"
+                                className="h-6 w-full rounded cursor-pointer border border-white/10"
+                                value={customRemoveColor}
+                                onChange={(e) => setCustomRemoveColor(e.target.value)}
+                              />
+                            </div>
+                          )}
+
                           <Button
                             size="sm"
-                            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] h-7"
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] h-7 font-bold shadow-lg"
                             onClick={() => removeElementBg(selectedElementId)}
                           >
                             Remove Logo Background

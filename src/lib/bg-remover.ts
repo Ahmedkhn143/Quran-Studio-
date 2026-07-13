@@ -19,7 +19,8 @@ export interface RGBA {
  */
 export function autoRemoveBackground(
   imageSrc: string,
-  tolerance = 30
+  tolerance = 30,
+  keyBgColor?: RGBA
 ): Promise<{ url: string; dominantColor: RGBA }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -41,21 +42,25 @@ export function autoRemoveBackground(
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
 
-      // Sample 4 corners to estimate the background color
-      const corners = [
-        getPixel(imgData, 0, 0),
-        getPixel(imgData, canvas.width - 1, 0),
-        getPixel(imgData, 0, canvas.height - 1),
-        getPixel(imgData, canvas.width - 1, canvas.height - 1),
-      ];
-
-      // Use average corner color as the key background color
-      const keyBg = {
-        r: Math.round(corners.reduce((sum, c) => sum + c.r, 0) / 4),
-        g: Math.round(corners.reduce((sum, c) => sum + c.g, 0) / 4),
-        b: Math.round(corners.reduce((sum, c) => sum + c.b, 0) / 4),
-        a: 255,
-      };
+      // Determine the key background color
+      let keyBg: RGBA;
+      if (keyBgColor) {
+        keyBg = keyBgColor;
+      } else {
+        // Sample 4 corners to estimate the background color
+        const corners = [
+          getPixel(imgData, 0, 0),
+          getPixel(imgData, canvas.width - 1, 0),
+          getPixel(imgData, 0, canvas.height - 1),
+          getPixel(imgData, canvas.width - 1, canvas.height - 1),
+        ];
+        keyBg = {
+          r: Math.round(corners.reduce((sum, c) => sum + c.r, 0) / 4),
+          g: Math.round(corners.reduce((sum, c) => sum + c.g, 0) / 4),
+          b: Math.round(corners.reduce((sum, c) => sum + c.b, 0) / 4),
+          a: 255,
+        };
+      }
 
       // Loop through all pixels and transparentize matching ones
       for (let i = 0; i < data.length; i += 4) {
