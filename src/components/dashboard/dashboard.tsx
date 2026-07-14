@@ -958,23 +958,29 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   // Auto-distribute timestamps when custom audio and slides are loaded
   useEffect(() => {
     if (customAudioUrl && audioDuration && slides.length > 0) {
-      const keys = Object.keys(customAudioTimestamps);
-      const isMismatch = keys.length !== slides.length;
-      
-      if (keys.length === 0 || isMismatch) {
-        const start = audioTrimStart;
-        const end = audioTrimEnd || audioDuration;
-        const segment = (end - start) / slides.length;
-        const newTimestamps: Record<number, { start: number; end: number }> = {};
-        for (let i = 0; i < slides.length; i++) {
-          newTimestamps[i] = {
-            start: parseFloat((start + i * segment).toFixed(2)),
-            end: parseFloat((start + (i + 1) * segment).toFixed(2)),
-          };
-        }
-        setCustomAudioTimestamps(newTimestamps);
-        toast.info("Auto-distributed audio timings across slides");
-      }
+      const timer = setTimeout(() => {
+        setCustomAudioTimestamps(prev => {
+          const keys = Object.keys(prev);
+          const isMismatch = keys.length !== slides.length;
+          
+          if (keys.length === 0 || isMismatch) {
+            const start = audioTrimStart;
+            const end = audioTrimEnd || audioDuration;
+            const segment = (end - start) / slides.length;
+            const newTimestamps: Record<number, { start: number; end: number }> = {};
+            for (let i = 0; i < slides.length; i++) {
+              newTimestamps[i] = {
+                start: parseFloat((start + i * segment).toFixed(2)),
+                end: parseFloat((start + (i + 1) * segment).toFixed(2)),
+              };
+            }
+            toast.info("Auto-distributed audio timings across slides");
+            return newTimestamps;
+          }
+          return prev;
+        });
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [customAudioUrl, audioDuration, slides.length, audioTrimStart, audioTrimEnd]);
 

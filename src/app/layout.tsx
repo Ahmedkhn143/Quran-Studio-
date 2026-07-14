@@ -46,6 +46,10 @@ const notoSans = Noto_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://quran.studio"),
+  alternates: {
+    canonical: "/",
+  },
   title: "Quran Studio — Free Online Quran Video Generator",
   description:
     "Create stunning Quran videos for YouTube, TikTok & Instagram — free in your browser. AI-generated backgrounds, 42 reciters, word-by-word highlight, 22 translations, MP4 export. No download required.",
