@@ -34,7 +34,7 @@
 
 @font-face {
   font-family: 'KFGQPC Uthmanic Script Hafs';
-  src: url('https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc/fonts/KFGQPC_Uthmanic_Script_HAFS_Regular.ttf') format('truetype');
+  src: url('/fonts/me_quran.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -42,7 +42,7 @@
 
 @font-face {
   font-family: 'Al Qalam Quran Majeed';
-  src: url('https://cdn.jsdelivr.net/gh/ShakesVision/QuranFont/Al-Qalam-Quran-Majeed.ttf') format('truetype');
+  src: url('/fonts/Al-Qalam-Quran-Majeed.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -50,7 +50,7 @@
 
 @font-face {
   font-family: 'PDMS Saleem Quran';
-  src: url('https://cdn.jsdelivr.net/gh/ShakesVision/QuranFont/pdms-saleem-quranfont.ttf') format('truetype');
+  src: url('/fonts/pdms-saleem-quranfont.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -58,7 +58,23 @@
 
 @font-face {
   font-family: 'LPMQ Isep Misbah';
-  src: url('https://cdn.jsdelivr.net/gh/utrodus/flutter-ayatnesia-quran-search/assets/fonts/LPMQ-IsepMisbah.ttf') format('truetype');
+  src: url('/fonts/LPMQ-IsepMisbah.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'me_quran';
+  src: url('/fonts/me_quran.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Al Mushaf';
+  src: url('/fonts/almushaf.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;

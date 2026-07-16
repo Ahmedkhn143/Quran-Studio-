@@ -146,26 +146,26 @@ const TEXT_PRESETS = [
 ];
 
 const PRESET_VIDEOS = [
-  { id: "v_starry", name: "Starry Sky", url: "https://player.vimeo.com/external/371433846.sd.mp4?s=236da2f3ccee8d3d2a09c2a611956637b3f9ff69&profile_id=139" },
-  { id: "v_particles", name: "Glow Loop", url: "https://player.vimeo.com/external/451837836.sd.mp4?s=d1d8858349285098ad8e92a2a0d922cfb940989f&profile_id=139" },
-  { id: "v_water", name: "Dawn Water", url: "https://player.vimeo.com/external/403842180.sd.mp4?s=4e4d588523c14d5e90d8985f39f906f30d074b1e&profile_id=139" },
-  { id: "v_dark_particles", name: "Dark Particles", url: "https://player.vimeo.com/external/384761655.sd.mp4?s=0f968ef61a7a0b3f5c5b4e339dcdcb5a49479b47&profile_id=139" },
-  { id: "v_nebula", name: "Nebula Loop", url: "https://player.vimeo.com/external/517602120.sd.mp4?s=9fe9de643d92fb0ef3a7cf49c4f1c1f7a0b4d455&profile_id=139" },
-  { id: "v_waves", name: "Abstract Waves", url: "https://player.vimeo.com/external/435641777.sd.mp4?s=005500e56e0d3752e259b3fa47d922a969bdfcfc&profile_id=139" },
-  { id: "v_smoke", name: "Smoke Flow", url: "https://player.vimeo.com/external/538568565.sd.mp4?s=001859cbf07c6f092795f7c35d76d4957e8d64fc&profile_id=139" },
-  { id: "v_forest", name: "Forest River", url: "https://player.vimeo.com/external/434045526.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
-  { id: "v_rain", name: "Rain On Window", url: "https://player.vimeo.com/external/369796001.sd.mp4?s=ad9fcfc05988e00d753d0e49eb72c694a974b77d&profile_id=139" },
-  { id: "v_ocean", name: "Ocean Waves", url: "https://player.vimeo.com/external/434042218.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
-  { id: "v_clouds", name: "Cloudy Sky", url: "https://player.vimeo.com/external/409221295.sd.mp4?s=e52e90f23cb8242a5a3a0c7104b2a3fa38b299c1&profile_id=139" },
-  { id: "v_bokeh", name: "Soft Bokeh", url: "https://player.vimeo.com/external/355159024.sd.mp4?s=ad9fcfc05988e00d753d0e49eb72c694a974b77d&profile_id=139" },
-  { id: "v_fluid", name: "Abstract Fluid", url: "https://player.vimeo.com/external/485984606.sd.mp4?s=0f968ef61a7a0b3f5c5b4e339dcdcb5a49479b47&profile_id=139" },
-  { id: "v_trails", name: "Star Trails", url: "https://player.vimeo.com/external/370395726.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
-  { id: "v_cyber", name: "Cyberpunk Grid", url: "https://player.vimeo.com/external/507490089.sd.mp4?s=005500e56e0d3752e259b3fa47d922a969bdfcfc&profile_id=139" },
-  { id: "v_ink", name: "Ink In Water", url: "https://player.vimeo.com/external/467888741.sd.mp4?s=d1d8858349285098ad8e92a2a0d922cfb940989f&profile_id=139" },
-  { id: "v_gold", name: "Golden Dust Loop", url: "https://player.vimeo.com/external/554867160.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
-  { id: "v_desert", name: "Desert Timelapse", url: "https://player.vimeo.com/external/434043949.sd.mp4?s=c1630132b1ff5606d15b0faad83ff6e788939c36&profile_id=139" },
-  { id: "v_sunrise", name: "Mountain Sunrise", url: "https://player.vimeo.com/external/415951662.sd.mp4?s=ad9fcfc05988e00d753d0e49eb72c694a974b77d&profile_id=139" },
-  { id: "v_snow", name: "Snow Falling", url: "https://player.vimeo.com/external/384762391.sd.mp4?s=0f968ef61a7a0b3f5c5b4e339dcdcb5a49479b47&profile_id=139" }
+  { id: "v_starry", name: "Starry Sky", url: "/presets/overcast.mp4" },
+  { id: "v_particles", name: "Glow Loop", url: "/presets/overcast.mp4" },
+  { id: "v_water", name: "Dawn Water", url: "/presets/light_rain.mp4" },
+  { id: "v_dark_particles", name: "Dark Particles", url: "/presets/overcast.mp4" },
+  { id: "v_nebula", name: "Nebula Loop", url: "/presets/cloudy.mp4" },
+  { id: "v_waves", name: "Abstract Waves", url: "/presets/light_rain.mp4" },
+  { id: "v_smoke", name: "Smoke Flow", url: "/presets/overcast.mp4" },
+  { id: "v_forest", name: "Forest River", url: "/presets/cloudy.mp4" },
+  { id: "v_rain", name: "Rain On Window", url: "/presets/rain.mp4" },
+  { id: "v_ocean", name: "Ocean Waves", url: "/presets/light_rain.mp4" },
+  { id: "v_clouds", name: "Cloudy Sky", url: "/presets/cloudy.mp4" },
+  { id: "v_bokeh", name: "Soft Bokeh", url: "/presets/overcast.mp4" },
+  { id: "v_fluid", name: "Abstract Fluid", url: "/presets/cloudy.mp4" },
+  { id: "v_trails", name: "Star Trails", url: "/presets/overcast.mp4" },
+  { id: "v_cyber", name: "Cyberpunk Grid", url: "/presets/overcast.mp4" },
+  { id: "v_ink", name: "Ink In Water", url: "/presets/overcast.mp4" },
+  { id: "v_gold", name: "Golden Dust Loop", url: "/presets/overcast.mp4" },
+  { id: "v_desert", name: "Desert Timelapse", url: "/presets/cloudy.mp4" },
+  { id: "v_sunrise", name: "Mountain Sunrise", url: "/presets/overcast.mp4" },
+  { id: "v_snow", name: "Snow Falling", url: "/presets/snow.mp4" }
 ];
 
 export function Dashboard({ onClose }: { onClose: () => void }) {
@@ -312,13 +312,15 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const arabicFontFamily = (() => {
     switch (arabicFont) {
       case "KFGQPC Uthmanic Script Hafs":
-        return '"KFGQPC Uthmanic Script Hafs", "Scheherazade New", "Amiri", serif';
+        return '"KFGQPC Uthmanic Script Hafs", "me_quran", "Scheherazade New", "Amiri", serif';
       case "Amiri Quran":
         return '"Amiri Quran", "Amiri", serif';
       case "Scheherazade":
         return '"Scheherazade", "Scheherazade New", serif';
       case "me_quran":
-        return '"Scheherazade New", "Amiri", serif';
+        return '"me_quran", "Scheherazade New", "Amiri", serif';
+      case "Al Mushaf":
+        return '"Al Mushaf", "Scheherazade New", "Amiri", serif';
       case "PDMS Saleem Quran Font":
       case "PDMS Saleem Quran":
         return '"PDMS Saleem Quran", "Noto Naskh Arabic", "Amiri", serif';
@@ -2760,11 +2762,13 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                     value={arabicFont}
                     onValueChange={setArabicFont}
                     options={[
-                      "Quran karim 114",
                       "KFGQPC Uthmanic Script Hafs",
                       "Al Qalam Quran Majeed",
+                      "me_quran",
+                      "Al Mushaf",
                       "PDMS Saleem Quran",
                       "LPMQ Isep Misbah",
+                      "Quran karim 114",
                       "Digital Khatt V2",
                       "ArabQuranIslamic140-K7n4W",
                       "ArabQuranIslamic140-vnmnZ",
@@ -2781,12 +2785,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       "Reem Kufi Funky",
                       "Noto Kufi Arabic",
                       "Noto Naskh Arabic",
-                      "KFGQPC Uthmanic Script Hafs",
                       "Amiri Quran",
                       "Scheherazade",
-                      "me_quran",
-                      "PDMS Saleem Quran Font",
-                      "LPMQ Isep Misbah",
                       "Cairo",
                       "Amiri",
                       "Tajawal",
@@ -4489,6 +4489,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         <span style={{ fontFamily: "'Al Qalam Quran Majeed'" }}>preload</span>
         <span style={{ fontFamily: "'PDMS Saleem Quran'" }}>preload</span>
         <span style={{ fontFamily: "'LPMQ Isep Misbah'" }}>preload</span>
+        <span style={{ fontFamily: "'me_quran'" }}>preload</span>
+        <span style={{ fontFamily: "'Al Mushaf'" }}>preload</span>
         <span style={{ fontFamily: "'Digital Khatt V2'" }}>preload</span>
         <span style={{ fontFamily: "'ArabQuranIslamic140-K7n4W'" }}>preload</span>
         <span style={{ fontFamily: "'ArabQuranIslamic140-vnmnZ'" }}>preload</span>
