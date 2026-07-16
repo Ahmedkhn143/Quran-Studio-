@@ -71,6 +71,8 @@ interface VideoGenDialogProps {
   translationShadowColor?: string;
   translationShadowBlur?: number;
   translationBackgroundType?: "none" | "box" | "rounded" | "glass";
+  showAyahNumber?: boolean;
+  ayahNumberStyle?: "ornate" | "circle" | "diamond" | "brackets" | "pill";
 }
 
 const QUALITY_PRESETS = [
@@ -100,7 +102,8 @@ export function VideoGenDialog({
   arabicYOffset, arabicXOffset, translationYOffset, translationXOffset,
   showArabic, highlightColor, highlightGradientStart, highlightGradientEnd, highlightGlowColor,
   showSurah, surahFont, surahFontSize, surahColor, surahBgOpacity, surahXOffset, surahYOffset,
-  translationColor, translationBgColor, translationBgOpacity, translationShadowColor, translationShadowBlur, translationBackgroundType
+  translationColor, translationBgColor, translationBgOpacity, translationShadowColor, translationShadowBlur, translationBackgroundType,
+  showAyahNumber, ayahNumberStyle
 }: VideoGenDialogProps) {
   const [quality, setQuality] = useState("720p");
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
@@ -225,7 +228,9 @@ export function VideoGenDialog({
         translationBgOpacity,
         translationShadowColor,
         translationShadowBlur,
-        translationBackgroundType
+        translationBackgroundType,
+        showAyahNumber,
+        ayahNumberStyle
       });
 
       setState("done");

@@ -35,6 +35,8 @@ export interface VideoGenOptions {
   overlayTextColor?: string;
   overlayTextSize?: number;
   overlayTextPosition?: "top" | "bottom";
+  showAyahNumber?: boolean;
+  ayahNumberStyle?: "ornate" | "circle" | "diamond" | "brackets" | "pill";
   
   // Custom video enhancements
   backgroundEffect?: "none" | "ken_burns" | "particles" | "blur" | "color_overlay";
@@ -405,9 +407,43 @@ export function drawSlide(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
+  // Helper for arabic digits
+  const toArabicDigits = (num: number): string => {
+    const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+    return String(num).split("").map((d) => {
+      const code = d.charCodeAt(0) - 48;
+      return code >= 0 && code <= 9 ? arabicDigits[code] : d;
+    }).join("");
+  };
+
   // Word wrap: split words into lines that fit within w * 0.85
   const maxWidth = w * 0.85;
-  const words = slide.arabicWords;
+  const words = [...slide.arabicWords];
+  if (opts.showAyahNumber && slide.ayahNumber > 0) {
+    const arabicNum = toArabicDigits(slide.ayahNumber);
+    const style = opts.ayahNumberStyle || "brackets";
+    let markerText = "";
+    switch (style) {
+      case "ornate":
+        markerText = `۝${arabicNum}`;
+        break;
+      case "circle":
+        markerText = `◯${arabicNum}`;
+        break;
+      case "diamond":
+        markerText = `⬦${arabicNum}⬦`;
+        break;
+      case "brackets":
+        markerText = `﴾${arabicNum}﴿`;
+        break;
+      case "pill":
+        markerText = `(${arabicNum})`;
+        break;
+      default:
+        markerText = `﴾${arabicNum}﴿`;
+    }
+    words.push({ text: markerText });
+  }
   const lines: { word: string; idx: number }[][] = [];
   let currentLine: { word: string; idx: number }[] = [];
   let currentWidth = 0;

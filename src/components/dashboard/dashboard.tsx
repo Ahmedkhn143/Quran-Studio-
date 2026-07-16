@@ -273,6 +273,10 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
   const [surahYOffset, setSurahYOffset] = useState<number>(0);
   const [customSurahName, setCustomSurahName] = useState("");
 
+  // Ayah end marker states
+  const [showAyahNumber, setShowAyahNumber] = useState<boolean>(true);
+  const [ayahNumberStyle, setAyahNumberStyle] = useState<string>("brackets");
+
   // Canvas elements state
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [history, setHistory] = useState<CanvasElement[][]>([[]]);
@@ -622,7 +626,9 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       surahColor,
       surahBgOpacity,
       surahXOffset,
-      surahYOffset
+      surahYOffset,
+      showAyahNumber,
+      ayahNumberStyle: ayahNumberStyle as any
     };
 
     const slideProgress = audioDuration ? progress / 100 : 0;
@@ -636,7 +642,7 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
     arabicYOffset, arabicXOffset, translationYOffset, translationXOffset, showArabic, highlightType, highlightColor, highlightGradientStart,
     highlightGradientEnd, highlightGlowColor, showSurah, surahFont, surahFontSize, surahColor, surahBgOpacity,
     surahXOffset, surahYOffset, customSurahName, translationColor, translationBgColor, translationBgOpacity,
-    translationShadowColor, translationShadowBlur, translationBackgroundType
+    translationShadowColor, translationShadowBlur, translationBackgroundType, showAyahNumber, ayahNumberStyle
   ]);
 
   // History & Undo/Redo
@@ -1166,52 +1172,56 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
       translationTextSize,
       textColor,
       textShadow,
-      arabicFont,
-      translationFont,
-      bgId,
-      bgOpacity,
-      elements,
-      backgroundEffect,
-      textEntranceEffect,
-      transitionEffect,
-      showAudioVisualizer,
-      arabicYOffset,
-      translationYOffset,
-      customAudioTimestamps
-    };
-    localStorage.setItem("quran_project_save", JSON.stringify(project));
-    toast.success("Project saved successfully!");
-  };
-
-  const loadProject = () => {
-    const raw = localStorage.getItem("quran_project_save");
-    if (!raw) {
-      toast.error("No saved project found");
-      return;
-    }
-    try {
-      const p = JSON.parse(raw);
-      if (p.surah) setSelectedSurah(p.surah);
-      if (p.from) setFromAyah(p.from);
-      if (p.to) setToAyah(p.to);
-      if (p.reciter) setReciter(p.reciter);
-      if (p.translation) setTranslation(p.translation);
-      if (p.arabicTextSize) setArabicTextSize(p.arabicTextSize);
-      if (p.translationTextSize) setTranslationTextSize(p.translationTextSize);
-      if (p.textColor) setTextColor(p.textColor);
-      if (p.textShadow) setTextShadow(p.textShadow);
-      if (p.arabicFont) setArabicFont(p.arabicFont);
-      if (p.translationFont) setTranslationFont(p.translationFont);
-      if (p.bgId) setBgId(p.bgId);
-      if (p.bgOpacity) setBgOpacity(p.bgOpacity);
-      if (p.elements) setElements(p.elements);
-      if (p.backgroundEffect) setBackgroundEffect(p.backgroundEffect);
-      if (p.textEntranceEffect) setTextEntranceEffect(p.textEntranceEffect);
-      if (p.transitionEffect) setTransitionEffect(p.transitionEffect);
-      if (p.showAudioVisualizer !== undefined) setShowAudioVisualizer(p.showAudioVisualizer);
-      if (p.arabicYOffset !== undefined) setArabicYOffset(p.arabicYOffset);
-      if (p.translationYOffset !== undefined) setTranslationYOffset(p.translationYOffset);
-      if (p.customAudioTimestamps) setCustomAudioTimestamps(p.customAudioTimestamps);
+       arabicFont,
+       translationFont,
+       bgId,
+       bgOpacity,
+       elements,
+       backgroundEffect,
+       textEntranceEffect,
+       transitionEffect,
+       showAudioVisualizer,
+       arabicYOffset,
+       translationYOffset,
+       customAudioTimestamps,
+       showAyahNumber,
+       ayahNumberStyle
+     };
+     localStorage.setItem("quran_project_save", JSON.stringify(project));
+     toast.success("Project saved successfully!");
+   };
+ 
+   const loadProject = () => {
+     const raw = localStorage.getItem("quran_project_save");
+     if (!raw) {
+       toast.error("No saved project found");
+       return;
+     }
+     try {
+       const p = JSON.parse(raw);
+       if (p.surah) setSelectedSurah(p.surah);
+       if (p.from) setFromAyah(p.from);
+       if (p.to) setToAyah(p.to);
+       if (p.reciter) setReciter(p.reciter);
+       if (p.translation) setTranslation(p.translation);
+       if (p.arabicTextSize) setArabicTextSize(p.arabicTextSize);
+       if (p.translationTextSize) setTranslationTextSize(p.translationTextSize);
+       if (p.textColor) setTextColor(p.textColor);
+       if (p.textShadow) setTextShadow(p.textShadow);
+       if (p.arabicFont) setArabicFont(p.arabicFont);
+       if (p.translationFont) setTranslationFont(p.translationFont);
+       if (p.bgId) setBgId(p.bgId);
+       if (p.bgOpacity) setBgOpacity(p.bgOpacity);
+       if (p.elements) setElements(p.elements);
+       if (p.backgroundEffect) setBackgroundEffect(p.backgroundEffect);
+       if (p.textEntranceEffect) setTextEntranceEffect(p.textEntranceEffect);
+       if (p.transitionEffect) setTransitionEffect(p.transitionEffect);
+       if (p.showAudioVisualizer !== undefined) setShowAudioVisualizer(p.showAudioVisualizer);
+       if (p.arabicYOffset !== undefined) setArabicYOffset(p.arabicYOffset);
+       if (p.translationYOffset !== undefined) setTranslationYOffset(p.translationYOffset);
+       if (p.customAudioTimestamps) setCustomAudioTimestamps(p.customAudioTimestamps);
+       if (p.showAyahNumber !== undefined) setShowAyahNumber(p.showAyahNumber);
+       if (p.ayahNumberStyle) setAyahNumberStyle(p.ayahNumberStyle);
       toast.success("Project loaded successfully!");
     } catch {
       toast.error("Failed to parse saved project");
@@ -2753,6 +2763,38 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
                       setTimeout(() => loadSlides(), 100);
                     }}
                   />
+                </div>
+
+                {/* Ayah End Marker Toggle & Style Selection */}
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="show-ayah-number" className="text-xs font-semibold">Ayah End Marker</Label>
+                      <p className="text-[9px] text-muted-foreground">Appends ornate marker with verse number at the end of the text</p>
+                    </div>
+                    <Switch
+                      id="show-ayah-number"
+                      checked={showAyahNumber}
+                      onCheckedChange={setShowAyahNumber}
+                    />
+                  </div>
+                  
+                  {showAyahNumber && (
+                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <Label className="block text-[10px] font-semibold text-muted-foreground">End Marker Style</Label>
+                      <SimpleSelect
+                        value={ayahNumberStyle}
+                        onValueChange={setAyahNumberStyle}
+                        options={[
+                          { value: "brackets", label: "Brackets ﴾١﴿" },
+                          { value: "ornate", label: "Ornate ۝١" },
+                          { value: "circle", label: "Circle ◯١" },
+                          { value: "diamond", label: "Diamond ⬦١⬦" },
+                          { value: "pill", label: "Pill (١)" }
+                        ]}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* 20+ Fonts Dynamic Selection */}
@@ -4480,6 +4522,8 @@ export function Dashboard({ onClose }: { onClose: () => void }) {
         translationShadowColor={translationShadowColor}
         translationShadowBlur={translationShadowBlur}
         translationBackgroundType={translationBackgroundType}
+        showAyahNumber={showAyahNumber}
+        ayahNumberStyle={ayahNumberStyle as any}
       />
       
       {/* Hidden Font Preloader to force browser to load custom web fonts */}
