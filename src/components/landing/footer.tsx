@@ -11,22 +11,22 @@ import {
 
 const LINKS = {
   Product: [
-    { label: "Editor", href: "#editor" },
-    { label: "Features", href: "#features" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "Changelog", href: "#" },
+    { label: "Editor", href: "/#editor" },
+    { label: "Features", href: "/#features" },
+    { label: "Pricing", href: "/#pricing" },
+    { label: "Free Forever", href: "/#free-forever" },
   ],
   Resources: [
-    { label: "Documentation", href: "#" },
-    { label: "Tutorials", href: "#" },
-    { label: "API Reference", href: "#" },
-    { label: "Community", href: "#" },
+    { label: "Sitemap", href: "/sitemap" },
+    { label: "XML Sitemap", href: "/sitemap.xml" },
+    { label: "AlQuran API", href: "https://alquran.cloud" },
+    { label: "Google Search Console", href: "/google6ea23c10c93f9b0b.html" },
   ],
   Company: [
-    { label: "About", href: "#about" },
-    { label: "Contact", href: "#" },
-    { label: "Privacy", href: "#" },
-    { label: "Terms", href: "#" },
+    { label: "About", href: "/#about" },
+    { label: "Contact", href: "mailto:support@quran.studio" },
+    { label: "Privacy", href: "/#pricing" },
+    { label: "Terms", href: "/#pricing" },
   ],
 };
 

@@ -6,14 +6,22 @@ import { Menu, X, BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
-  { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "About", href: "#about" },
+  { label: "Features", href: "/#features" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "About", href: "/#about" },
 ];
 
-export function Navbar({ onStart }: { onStart: () => void }) {
+export function Navbar({ onStart }: { onStart?: () => void }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  const handleStart = () => {
+    if (onStart) {
+      onStart();
+    } else {
+      window.location.href = "/";
+    }
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -74,7 +82,7 @@ export function Navbar({ onStart }: { onStart: () => void }) {
             Donate
           </Button>
           <Button
-            onClick={onStart}
+            onClick={handleStart}
             size="sm"
             className="bg-gradient-to-r from-emerald-700 to-emerald-800 text-white hover:from-emerald-800 hover:to-emerald-900 shadow-md hover:shadow-lg transition-all"
           >
@@ -116,7 +124,7 @@ export function Navbar({ onStart }: { onStart: () => void }) {
               <Button
                 onClick={() => {
                   setOpen(false);
-                  onStart();
+                  handleStart();
                 }}
                 className="mt-2 w-full bg-gradient-to-r from-emerald-700 to-emerald-800 text-white"
               >
